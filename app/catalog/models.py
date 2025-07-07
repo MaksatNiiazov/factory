@@ -1,0 +1,597 @@
+from django.db import models
+from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
+
+from django.db.models.signals import post_save
+
+from django.dispatch import receiver
+
+from django.utils.translation import gettext_lazy as _
+from pybarker.django.db.models import ReadableJSONField
+
+from pybarker.contrib.modelshistory.models import HistoryModelTracker
+
+from catalog.choices import (
+    MaterialType, FieldTypeChoices, Standard, SeriesNameChoices, PipeDirectionChoices,
+    ComponentGroupType,
+)
+from catalog.managers import ClampMaterialCoefficientManager, PipeDiameterSoftDeleteManager, PipeDiameterAllObjectsManager
+from kernel.mixins import SoftDeleteModelMixin
+from ops.marking_compiler import get_jinja2_env
+
+
+class CatalogMixin(models.Model):
+    """
+    Базовый класс для всех каталогов.
+    """
+
+    class Meta:
+        abstract = True
+    
+    @property
+    def display_name(self):
+        return str(self)
+
+
+class Directory(SoftDeleteModelMixin, models.Model):
+    name = models.CharField(max_length=255, verbose_name=_('Название'))
+    display_name_template = models.TextField(blank=True, default='', verbose_name=_('Шаблон отображения'))
+
+    class Meta:
+        verbose_name = _('Справочник')
+        verbose_name_plural = _('Справочники')
+
+    def save(self, *args, **kwargs):
+        old_instance = None
+
+        if self.pk:
+            try:
+                old_instance = Directory.objects.get(pk=self.pk)
+            except Directory.DoesNotExist:
+                old_instance = None
+
+        super().save(*args, **kwargs)
+
+        if old_instance and old_instance.display_name_template != self.display_name_template:
+            self.refresh_all_entries_display_name()
+
+    def refresh_all_entries_display_name(self):
+        for entry in self.entries.all():
+            entry.refresh_display_name()
+
+    def __str__(self):
+        return self.name
+
+
+class DirectoryField(SoftDeleteModelMixin, models.Model):
+    directory = models.ForeignKey(
+        Directory, on_delete=models.CASCADE, related_name='fields', verbose_name=_('Справочник')
+    )
+    name = models.CharField(max_length=255, verbose_name=_('Название поля'))
+    field_type = models.CharField(max_length=10, choices=FieldTypeChoices.choices, verbose_name=_('Тип поля'))
+
+    class Meta:
+        verbose_name = _('Поле в справочнике')
+        verbose_name_plural = _('Поля в справочнике')
+
+    def __str__(self):
+        return f'{self.directory.name} -> {self.name} ({self.field_type})'
+
+
+class DirectoryEntry(SoftDeleteModelMixin, models.Model):
+    directory = models.ForeignKey(
+        Directory, on_delete=models.CASCADE, related_name='entries', verbose_name=_('Справочник')
+    )
+    display_name = models.CharField(
+        max_length=255, blank=True, default="", verbose_name=_('Отображаемое имя')
+    )
+    display_name_errors = ReadableJSONField(blank=True, default=list, verbose_name=_('Ошибки при генерации имени'))
+
+    class Meta:
+        verbose_name = _('Запись в справочнике')
+        verbose_name_plural = _('Записи в справочнике')
+
+    def refresh_display_name(self):
+        from .models import DirectoryEntryValue
+        env = get_jinja2_env()
+
+        context = {}
+        for val_obj in self.values.select_related('directory_field'):
+            context[val_obj.directory_field.name] = val_obj.value
+
+        template_str = self.directory.display_name_template or ''
+        try:
+            template = env.from_string(template_str)
+            rendered = template.render(context)
+            self.display_name = rendered
+            self.display_name_errors = []
+        except Exception as e:
+            self.display_name = 'ERROR'
+            self.display_name_errors = [str(e)]
+
+        self.save(update_fields=['display_name', 'display_name_errors'])
+
+    def __str__(self):
+        return f'Запись #{self.id} в {self.directory.name}'
+
+
+class DirectoryEntryValue(SoftDeleteModelMixin, models.Model):
+    entry = models.ForeignKey(DirectoryEntry, on_delete=models.CASCADE, related_name='values', verbose_name='Запись')
+    directory_field = models.ForeignKey(
+        DirectoryField, on_delete=models.CASCADE, related_name='values', verbose_name=_('Поле')
+    )
+
+    int_value = models.IntegerField(null=True, blank=True, verbose_name=_('Целое число'))
+    float_value = models.FloatField(null=True, blank=True, verbose_name=_('Вещественное число'))
+    str_value = models.CharField(null=True, blank=True, verbose_name=_('Строка'))
+    bool_value = models.BooleanField(null=True, blank=True, verbose_name=_('Логическое значение'))
+
+    class Meta:
+        verbose_name = _('Значение поля')
+        verbose_name_plural = _('Значения полей')
+
+    def __str__(self):
+        return f'Value for field {self.directory_field.name} in entry {self.entry.id}'
+
+    def clean(self):
+        super().clean()
+        if self.entry.directory_id != self.directory_field.directory_id:
+            raise ValidationError('Поле и запись должны относиться к одному и тому же справочнику.')
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    @property
+    def value(self):
+        ftype = self.directory_field.field_type
+
+        if ftype == FieldTypeChoices.INT:
+            return self.int_value
+        elif ftype == FieldTypeChoices.FLOAT:
+            return self.float_value
+        elif ftype == FieldTypeChoices.STR:
+            return self.str_value
+        elif ftype == FieldTypeChoices.BOOL:
+            return self.bool_value
+        return None
+
+    def set_value(self, new_value):
+        ftype = self.directory_field.field_type
+
+        try:
+            if ftype == FieldTypeChoices.INT:
+                self.int_value = int(new_value) if new_value is not None else None
+                self.float_value = None
+                self.str_value = None
+                self.bool_value = None
+            elif ftype == FieldTypeChoices.FLOAT:
+                self.int_value = None
+                self.float_value = float(new_value) if new_value is not None else None
+                self.str_value = None
+                self.bool_value = None
+            elif ftype == FieldTypeChoices.STR:
+                self.int_value = None
+                self.float_value = None
+                self.str_value = str(new_value) if new_value is not None else None
+                self.bool_value = None
+            elif ftype == FieldTypeChoices.BOOL:
+                self.int_value = None
+                self.float_value = None
+                self.str_value = None
+
+                if isinstance(new_value, str):
+                    if new_value.lower() in ['true', '1']:
+                        self.bool_value = True
+                    elif new_value.lower() in ['false', '0']:
+                        self.bool_value = False
+                    else:
+                        raise ValidationError(f'Значение "{new_value}" не может быть преобразовано к bool')
+                else:
+                    self.bool_value = bool(new_value) if new_value is not None else None
+            self.save()
+            self.entry.refresh_display_name()
+        except (ValueError, TypeError) as e:
+            raise ValidationError(f'Невозможно преобразовать значение "{new_value}" к типу {ftype}: {e}')
+
+class NominalDiameter(CatalogMixin, SoftDeleteModelMixin, models.Model):
+    dn = models.PositiveSmallIntegerField(verbose_name=_('Номинальный диаметр'), unique=True)
+
+    historylog = HistoryModelTracker(excluded_fields=('id',), root_model='self', root_id=lambda ins: ins.id)
+
+    def __str__(self):
+        return f'DN{self.dn}'
+
+    class Meta:
+        verbose_name = _('Номинальный диаметр')
+        verbose_name_plural = _('Номинальные диаметры')
+        ordering = ['dn']
+
+
+class PipeDiameter(CatalogMixin, SoftDeleteModelMixin, models.Model):
+    class Option(models.IntegerChoices):
+        DN_A = 1, _('А')
+        DN_B = 2, _('Б')
+        DN_V = 3, _('В')
+        __empty__ = '--------'
+
+    dn = models.ForeignKey(NominalDiameter, verbose_name=_('Номинальный диаметр'), on_delete=models.PROTECT)
+    option = models.PositiveSmallIntegerField(
+        verbose_name=_('Исполнение'), choices=Option.choices, null=True, blank=True
+    )
+    standard = models.PositiveSmallIntegerField(verbose_name=_('Стандарт'), choices=Standard.choices)
+    size = models.FloatField(verbose_name=_('Фактический размер, мм'), validators=[MinValueValidator(0.0)])
+
+    historylog = HistoryModelTracker(excluded_fields=('id',), root_model='self', root_id=lambda ins: ins.id)
+
+    @property
+    def erp_display_name(self):
+        return f'{self.dn.dn}{self.get_option_display()}' if self.option else f'{self.dn.dn}'
+
+    def __str__(self):
+        return f'DN{self.dn.dn}({self.get_option_display()}) (Размер={self.size} мм)' if self.option else f'DN{self.dn.dn} (Размер={self.size} мм)'
+
+    objects = PipeDiameterSoftDeleteManager()
+    all_objects = PipeDiameterAllObjectsManager()
+
+    class Meta:
+        verbose_name = _('Номинальный диаметр трубы')
+        verbose_name_plural = _('Номинальные диаметры труб')
+        ordering = ['standard', 'dn']
+        constraints = [
+            models.UniqueConstraint(fields=('dn', 'option', 'standard'), name='unique_pipe_diameter'),
+        ]
+
+
+class LoadGroup(CatalogMixin, SoftDeleteModelMixin, models.Model):
+    lgv = models.IntegerField(verbose_name=_('LGV'))
+    kn = models.IntegerField(verbose_name=_('kN'))
+
+    historylog = HistoryModelTracker(excluded_fields=('id',), root_model='self', root_id=lambda ins: ins.id)
+
+    class Meta:
+        verbose_name = _('нагрузочная группа')
+        verbose_name_plural = _('нагрузочные группы')
+
+    def __str__(self):
+        return f'LGV={self.lgv} kN={self.kn}'
+
+
+class Material(CatalogMixin, SoftDeleteModelMixin, models.Model):
+    name = models.CharField(max_length=255, null=True, blank=True, verbose_name=_('Наименование'))
+    group = models.CharField(max_length=32, verbose_name=_('Группа'))
+
+    type = models.CharField(
+        max_length=1, choices=MaterialType.choices, null=True, blank=True, verbose_name=_('Тип материала'),
+    )
+
+    astm_spec = models.CharField(max_length=36, null=True, blank=True, verbose_name=_('Спецификация по стандарту ASTM'))
+    asme_type = models.CharField(
+        max_length=36, null=True, blank=True, verbose_name=_('Тип материала по классификации ASME'),
+    )
+    asme_uns = models.CharField(
+        max_length=36, null=True, blank=True, verbose_name=_('Уникальный номер материала по классификации ASME'),
+    )
+
+    source = models.CharField(max_length=255, null=True, blank=True, verbose_name=_('Стандарт'))
+
+    min_temp = models.IntegerField(null=True, blank=True, verbose_name=_('Минимальная рабочая температура материала'))
+    max_temp = models.IntegerField(null=True, blank=True, verbose_name=_('Максимальная рабочая температура материала'))
+    max_exhaust_gas_temp = models.IntegerField(
+        null=True, blank=True, verbose_name=_('Максимальная температура выхлопных газов'),
+    )
+
+    lz = models.FloatField(null=True, blank=True)
+
+    density = models.FloatField(null=True, blank=True, verbose_name=_('Плотность'))
+    spring_constant = models.FloatField(null=True, blank=True, verbose_name=_('Пружинная постоянная'))
+    rp0 = models.IntegerField(null=True, blank=True, verbose_name=_('Предел текучести'))
+
+    historylog = HistoryModelTracker(excluded_fields=('id',), root_model='self', root_id=lambda ins: ins.id)
+
+    class Meta:
+        verbose_name = _('Материал')
+        verbose_name_plural = _('Материалы')
+
+    def is_stainless_steel(self) -> bool:
+        """
+        Проверяет, является ли материал нержавеющей сталью.
+        """
+        return self.type in [MaterialType.A, MaterialType.N]
+    
+    def is_black_metal(self) -> bool:
+        """
+        Проверяет, является ли материал черным металлом.
+        """
+        return self.type == MaterialType.F
+
+    def clean(self) -> None:
+        """
+        Переопределяет метод clean для выполнения дополнительной валидации.
+
+        Выполняет проверку, что максимальная рабочая температура (max_temp)
+        не меньше минимальной рабочей температуры (min_temp). Если условие
+        нарушается, вызывает ошибку валидации.
+        """
+        super().clean()
+
+        if self.min_temp is not None and self.max_temp is not None:
+            if self.max_temp < self.min_temp:
+                raise ValidationError({
+                    'max_temp': _('Максимальная температура не может быть меньше минимальной температуры.'),
+                })
+
+    def __str__(self) -> str:
+        return str(self.name)
+
+
+class CoveringType(CatalogMixin, SoftDeleteModelMixin, models.Model):
+    numeric = models.IntegerField(verbose_name=_('Числовое значение'))
+    name = models.CharField(max_length=255, null=True, blank=True, verbose_name=_('Наименование'))
+    description = models.TextField(null=True, blank=True, verbose_name=_('Описание'))
+
+    historylog = HistoryModelTracker(excluded_fields=('id',), root_model='self', root_id=lambda ins: ins.id)
+
+    class Meta:
+        verbose_name = _('Тип покрытия')
+        verbose_name_plural = _('Типы покрытий')
+        ordering = ('numeric',)
+
+    def __str__(self):
+        return str(self.name)
+
+
+class Covering(CatalogMixin, SoftDeleteModelMixin, models.Model):
+    name = models.CharField(max_length=255, verbose_name=_('Наименование'))
+    description = models.TextField(null=True, blank=True, verbose_name=_('Описание'))
+
+    historylog = HistoryModelTracker(excluded_fields=('id',), root_model='self', root_id=lambda ins: ins.id)
+
+    class Meta:
+        verbose_name = _('покрытие')
+        verbose_name_plural = _('покрытия')
+        ordering = ('name',)
+
+    def __str__(self):
+        return str(self.name)
+
+
+@receiver(post_save, sender=Material)
+def update_marking_on_items(sender, instance, **kwargs):
+    """
+    В случае изменения материала, заново генерируем маркировку в Item, так-как он зависит от данных в материале
+    """
+    from ops.models import Item
+
+    # TODO: Возможно можно оптимизировать, если сначала искать в DetailType.marking_template слова содержащий
+    #  material.name и material.group. На будущее
+    items = Item.objects.filter(material=instance)
+    items.generate_marking()
+
+
+class SupportDistance(CatalogMixin, SoftDeleteModelMixin, models.Model):
+    """
+    Справочник расстояний между опорами.
+    """
+    name = models.CharField(max_length=255, verbose_name=_('Название'))
+    value = models.FloatField(verbose_name=_('Расстояние между опорами, мм'), validators=[MinValueValidator(0.0)])
+
+    class Meta:
+        verbose_name = _('Расстояние между опорами')
+        verbose_name_plural = _('Расстояния между опорами')
+        ordering = ['value']
+
+    def __str__(self):
+        return f"{self.name} ({self.value} мм)"
+
+
+class ProductClass(CatalogMixin, SoftDeleteModelMixin, models.Model):
+    name = models.CharField(max_length=255, verbose_name=_('Название'))
+
+    class Meta:
+        verbose_name = _('Класс изделия')
+        verbose_name_plural = _('Классы изделий')
+
+    def __str__(self):
+        return self.name
+
+
+class ProductFamily(CatalogMixin, SoftDeleteModelMixin, models.Model):
+    """
+    Справочник семейства изделий.
+    """
+    product_class = models.ForeignKey(
+        ProductClass, on_delete=models.PROTECT, related_name='product_families', verbose_name=_('Класс изделия'),
+    )
+    name = models.CharField(max_length=255, unique=True, verbose_name=_('Название семейства'))
+    icon = models.ImageField(upload_to="product_families/", null=True, blank=True, verbose_name=_('Иконка'))
+
+    is_upper_mount_selectable = models.BooleanField(
+        default=False, blank=True, verbose_name=_('Доступен выбор верхнего крепления'),
+    )
+    has_rod = models.BooleanField(
+        default=False, blank=True, verbose_name=_('Альтернативный расчет высоты за счет регулировки штока'),
+    )
+
+
+    class Meta:
+        verbose_name = _('Семейство изделий')
+        verbose_name_plural = _('Семейства изделий')
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+class Load(CatalogMixin, SoftDeleteModelMixin, models.Model):
+    series_name = models.CharField(
+        max_length=SeriesNameChoices.get_max_length(), choices=SeriesNameChoices.choices,
+        verbose_name=_('Наименование серии'),
+    )
+    size = models.PositiveIntegerField(verbose_name=_('Размер'))
+    rated_stroke_50 = models.PositiveIntegerField(verbose_name=_('Номинальный ход 50'))
+    rated_stroke_100 = models.PositiveIntegerField(verbose_name=_('Номинальный ход 100'))
+    rated_stroke_200 = models.PositiveIntegerField(verbose_name=_('Номинальный ход 200'))
+    load_group_lgv = models.PositiveIntegerField(verbose_name=_('Группа LGV'))
+    design_load = models.FloatField(verbose_name=_('Расчетная нагрузка'))
+
+    class Meta:
+        verbose_name = _('Нагрузка')
+        verbose_name_plural = _('Нагрузки')
+
+    def __str__(self):
+        return f'{self.series_name} | Size {self.size} | Load={self.design_load}'
+
+
+class SpringStiffness(CatalogMixin, SoftDeleteModelMixin, models.Model):
+    series_name = models.CharField(
+        max_length=SeriesNameChoices.get_max_length(), choices=SeriesNameChoices.choices,
+        verbose_name=_('Наименование серии'),
+    )
+    size = models.PositiveIntegerField(verbose_name=_('Размер'))
+    rated_stroke = models.PositiveIntegerField(verbose_name=_('Номинальный ход'))
+    value = models.FloatField(null=True, blank=True, verbose_name=_('Жесткость'))
+
+    class Meta:
+        verbose_name = _('Пружинная жесткость')
+        verbose_name_plural = _('Пружинные жесткости')
+
+    def __str__(self):
+        return f'{self.series_name} | Size {self.size} | Stroke={self.rated_stroke} | R{self.value}'
+
+
+class PipeMountingGroup(CatalogMixin, SoftDeleteModelMixin, models.Model):
+    name = models.CharField(max_length=255, verbose_name=_('Наименование'))
+    variants = models.ManyToManyField('ops.Variant', blank=True, related_name='+', verbose_name=_('Типы креплений'))
+
+    class Meta:
+        verbose_name = _('Группа креплений к трубе')
+        verbose_name_plural = _('Группы креплений к трубе')
+
+    def __str__(self):
+        return self.name
+
+
+class PipeMountingRule(CatalogMixin, SoftDeleteModelMixin, models.Model):
+    family = models.ForeignKey(
+        ProductFamily, on_delete=models.PROTECT, related_name='+', verbose_name=_('Семейство изделия')
+    )
+    num_spring_blocks = models.PositiveSmallIntegerField(verbose_name=_('Количество пружинных блоков'))
+    pipe_direction = models.CharField(
+        max_length=PipeDirectionChoices.get_max_length(), choices=PipeDirectionChoices.choices,
+        verbose_name=_('Направление трубы')
+    )
+    pipe_mounting_groups = models.ManyToManyField(
+        PipeMountingGroup, blank=True, related_name='+', verbose_name=_('Группы креплений к трубе')
+    )
+    mounting_groups_b = models.ManyToManyField(
+        PipeMountingGroup, blank=True, related_name='+', verbose_name=_('Группы крепления В')
+    )
+
+    class Meta:
+        verbose_name = _('Правило выбора крепления')
+        verbose_name_plural = _('Правила выбора креплений')
+
+    def __str__(self):
+        return f'{self.family} | {self.num_spring_blocks} ПБ | Труба {self.pipe_direction}'
+
+
+class ComponentGroup(CatalogMixin, SoftDeleteModelMixin, models.Model):
+    group_type = models.CharField(
+        max_length=ComponentGroupType.get_max_length(), choices=ComponentGroupType.choices,
+        verbose_name=_('Тип группы'),
+    )
+    detail_types = models.ManyToManyField(
+        'ops.DetailType', blank=True, related_name='+', verbose_name=_('Типы детали/изделии'),
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['group_type'], condition=models.Q(deleted_at__isnull=True), name='unique_group_type_if_not_deleted'
+            )
+        ]
+        verbose_name = _('Группа компонентов')
+        verbose_name_plural = _('Группы компонентов')
+
+    def __str__(self):
+        return f'{self.get_group_type_display()}'
+
+
+class SpringBlockFamilyBinding(CatalogMixin, models.Model):
+    family = models.OneToOneField(
+        ProductFamily, on_delete=models.CASCADE, related_name='+', verbose_name=_('Семейство изделия'),
+    )
+    spring_block_types = models.ManyToManyField(
+        'ops.DetailType', related_name='+', verbose_name=_('Допустимые типы пружинных блоков'),
+    )
+
+    class Meta:
+        verbose_name = _('Связь семейства с типами пружинных блоков')
+        verbose_name_plural = _('Связи семейств с типами пружинных блоков')
+
+    def __str__(self):
+        return f'{self.family.name}'
+
+
+class SSBCatalog(CatalogMixin, models.Model):
+    fn = models.PositiveIntegerField(verbose_name=_('Номинальная нагрузка, kH'))
+    stroke = models.PositiveIntegerField(verbose_name=_('Ход, мм'))
+    f = models.PositiveIntegerField(verbose_name=_('F, мм'))
+    l = models.PositiveIntegerField(null=True, blank=True, verbose_name=_('L, мм'))
+    l1 = models.PositiveIntegerField(null=True, blank=True, verbose_name=_('L1, мм'))
+    l2_min = models.PositiveIntegerField(null=True, blank=True, verbose_name=_('L2 мин., мм'))
+    l2_max = models.PositiveIntegerField(null=True, blank=True, verbose_name=_('L2 макс., мм'))
+    l3_min = models.PositiveIntegerField(verbose_name=_('L3 мин., мм'))
+    l3_max = models.PositiveIntegerField(verbose_name=_('L3 макс., мм'))
+    l4 = models.PositiveIntegerField(verbose_name=_('L4, мм'))
+    a = models.PositiveIntegerField(verbose_name='A')
+    b = models.PositiveIntegerField(verbose_name='B')
+    h = models.PositiveIntegerField(verbose_name='H')
+    diameter_j = models.PositiveIntegerField(verbose_name='ØJ')
+
+    class Meta:
+        verbose_name = _('Гидроамортизатор SSB')
+        verbose_name_plural = _('Гидроамортизаторы SSB')
+        ordering = ['fn', 'stroke', 'l']
+
+    def __str__(self):
+        return f'SSB {self.fn:04d}.?.?'
+
+
+class ClampMaterialCoefficient(CatalogMixin, models.Model):
+    material_group = models.CharField(max_length=32, verbose_name=_("Группа материала"))
+    temperature_from = models.PositiveSmallIntegerField(null=True, blank=True, verbose_name=_("Температура от, °C"))
+    temperature_to = models.PositiveSmallIntegerField(null=True, blank=True, verbose_name=_("Температура до, °C"))
+    coefficient = models.FloatField(verbose_name=_("Коэффициент материала"))
+
+    objects = ClampMaterialCoefficientManager()
+
+    class Meta:
+        verbose_name = _("Коэффициент материала для хомута")
+        verbose_name_plural = _("Коэффициенты материалов для хомутов")
+        ordering = [
+            "material_group",
+            models.F("temperature_from").asc(nulls_first=True),
+            "temperature_to"
+        ]
+    
+    def clean(self):
+        super().clean()
+
+        # Проверяем, что хотя бы одна температура указана
+        if self.temperature_from is None and self.temperature_to is None:
+            raise ValidationError({
+                "temperature_from": _("Необходимо указать хотя бы одну температуру."),
+                "temperature_to": _("Необходимо указать хотя бы одну температуру."),
+            })
+
+        # Проверяем, что если указаны обе температуры, то максимальная не меньше минимальной
+        if self.temperature_from is not None and self.temperature_to is not None:
+            if self.temperature_to < self.temperature_from:
+                raise ValidationError({
+                    "temperature_to": _("Максимальная температура не может быть меньше минимальной температуры."),
+                })
+    
+    def __str__(self):
+        return f"{self.material_group} ({self.temperature_from}°C - {self.temperature_to}°C): {self.coefficient}"

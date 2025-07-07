@@ -1,0 +1,351 @@
+{% extends 'ops/base.html' %}
+{% load i18n %}
+
+{% block title %}OPS{% endblock %}
+
+{% block content %}
+<h1>OPS</h1>
+
+<form method="post">
+    {% csrf_token %}
+    <fieldset>
+        <legend>{% trans 'Ввод значений нагрузок и перемещений' %}</legend>
+        {% if form.errors %}
+        <div class="alert alert-danger" role="alert">{% trans 'Произошла ошибка при вычислении' %}</div>
+        {% endif %}
+        <div class="row mb-3">
+            <label for="loadMinus" class="col-md-2 col-form-label">{% trans 'Нагрузка' %} (-)</label>
+            <div class="col-md-10">
+                <div class="input-group">
+                    <input class="form-control" id="loadMinus" name="load_minus" value="{{ form.load_minus.value|default_if_none:"" }}">
+                    <span class="input-group-text">[kN]</span>
+                </div>
+                {% if form.load_minus.errors %}
+                <div class="form-text text-danger">{{ form.load_minus.errors.as_text }}</div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="row mb-3">
+            <label for="movementPlus" class="col-md-2 col-form-label">{% trans 'Перемещение' %} (+)</label>
+            <div class="col-md-10">
+                <div class="input-group">
+                    <input class="form-control" id="movementPlus" name="movement_plus" value="{{ form.movement_plus.value|default_if_none:"" }}">
+                    <span class="input-group-text">[mm]</span>
+                </div>
+                {% if form.movement_plus.errors %}
+                <div class="form-text text-danger">{{ form.movement_plus.errors.as_text }}</div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="row mb-3">
+            <label for="movementMinus" class="col-md-2 col-form-label">{% trans 'Перемещение' %} (-)</label>
+            <div class="col-md-10">
+                <div class="input-group">
+                    <input class="form-control" id="movementMinus" name="movement_minus" value="{{ form.movement_minus.value|default_if_none:"" }}">
+                    <span class="input-group-text">[mm]</span>
+                </div>
+                {% if form.movement_minus.errors %}
+                <div class="form-text text-danger">{{ form.movement_minus.errors.as_text }}</div>
+                {% endif %}
+            </div>
+        </div>
+    </fieldset>
+    <fieldset class="mt-3">
+        <legend>{% trans "Серия" %}</legend>
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="standard_series" id="standardSeries" {% if form.standard_series.value %}checked{% endif %}>
+            <label class="form-check-label" for="standardSeries">{% trans 'W-серия' %}</label>
+        </div>
+        {% if form.standard_series.errors %}
+            <div class="form-text text-danger">{{ form.standard_series.errors.as_text }}</div>
+        {% endif %}
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="l_series" id="lSeries" {% if form.l_series.value %}checked{% endif %}>
+            <label class="form-check-label" for="lSeries">{% trans 'L-серия' %}</label>
+        </div>
+        {% if form.l_series.errors %}
+            <div class="form-text text-danger">{{ form.l_series.errors.as_text }}</div>
+        {% endif %}
+    </fieldset>
+    <!--
+    <fieldset class="mt-3">
+        <legend>{% trans 'Выбор узла и расположение трубы' %}</legend>
+        <div class="row">
+        <fieldset class="col-md-6 col-lg-3">
+            <legend><small>{% trans 'Изделие' %}</small></legend>
+            <div class="form-check">
+                <input id="springSuspensionKit" class="form-check-input" type="radio" name="product" value="spring_suspension_kit"/>
+                <label class="form-check-label" for="springSuspensionKit">{% trans 'Комплект с пружинной подвеской/опорой' %}</label>
+            </div>
+            <div class="form-check">
+                <input id="rigidSuspension" class="form-check-input" type="radio" name="product" value="rigid_suspension"/>
+                <label class="form-check-label" for="rigidSuspension">{% trans 'Жесткая подвеска' %}</label>
+            </div>
+            <div class="form-check">
+                <input id="articulatedSupport" class="form-check-input" type="radio" name="product" value="articulated_support"/>
+                <label class="form-check-label" for="articulatedSupport">{% trans 'Опора шарнирная' %}</label>
+            </div>
+            <div class="form-check">
+                <input id="hingeStruts" class="form-check-input" type="radio" name="product" value="hinge_struts"/>
+                <label class="form-check-label" for="hingeStruts">{% trans 'Стойки шарнира' %}</label>
+            </div>
+            <div class="form-check">
+                <input id="shockAbsorber" class="form-check-input" type="radio" name="product" value="shock_absorber"/>
+                <label class="form-check-label" for="shockAbsorber">{% trans 'Амортизатор' %}</label>
+            </div>
+            <div class="form-check">
+                <input id="suspensionBlock" class="form-check-input" type="radio" name="product" value="suspension_block"/>
+                <label class="form-check-label" for="suspensionBlock">{% trans 'Блок подвески/опоры' %}</label>
+            </div>
+            <div class="form-check">
+                <input id="collar" class="form-check-input" type="radio" name="product" value="collar"/>
+                <label class="form-check-label" for="collar">{% trans 'Хомут' %}</label>
+            </div>
+            <div class="form-check">
+                <input id="accessories" class="form-check-input" type="radio" name="product" value="accessories"/>
+                <label class="form-check-label" for="accessories">{% trans 'Комплектующие' %}</label>
+            </div>
+        </fieldset>
+        <fieldset class="col-md-6 col-lg-3">
+            <legend><small>{% trans 'Расположение трубы' %}</small></legend>
+            <div class="form-check">
+                <input id="horizontal" class="form-check-input" type="radio" name="pipe_location" value="horizontal"/>
+                <label class="form-check-label" for="horizontal">{% trans 'горизонтальное' %}</label>
+            </div>
+            <div class="form-check">
+                <input id="vertical" class="form-check-input" type="radio" name="pipe_location" value="vertical"/>
+                <label class="form-check-label" for="vertical">{% trans 'вертикальное' %}</label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="withoutPipeClamp">
+                <label class="form-check-label" for="withoutPipeClamp">{% trans 'без трубного хомута' %}</label>
+            </div>
+        </fieldset>
+        <fieldset class="col-md-6 col-lg-3">
+            <legend><small>{% trans 'Направление нагрузки' %}</small></legend>
+            <div class="form-check">
+                <input id="suspension" class="form-check-input" type="radio" name="load_direction" value="suspension"/>
+                <label class="form-check-label" for="suspension">{% trans 'Подвеска' %}</label>
+            </div>
+            <div class="form-check">
+                <input id="support" class="form-check-input" type="radio" name="load_direction" value="support"/>
+                <label class="form-check-label" for="support">{% trans 'Опора' %}</label>
+            </div>
+            <div class="form-check">
+                <input id="doubleSuspension" class="form-check-input" type="radio" name="load_direction" value="double_suspension"/>
+                <label class="form-check-label" for="doubleSuspension">{% trans 'Двойная подвеска' %}</label>
+            </div>
+            <div class="form-check">
+                <input id="doubleSupport" class="form-check-input" type="radio" name="load_direction" value="double_support"/>
+                <label class="form-check-label" for="doubleSupport">{% trans 'Двойная опора' %}</label>
+            </div>
+            <div class="form-check">
+                <input id="branchedSuspension" class="form-check-input" type="radio" name="load_direction" value="branched_suspension" readonly />
+                <label class="form-check-label" for="branchedSuspension">{% trans 'Разветвленная подвеска' %}</label>
+            </div>
+            <div class="form-check">
+                <input id="specialCase" class="form-check-input" type="radio" name="load_direction" value="special_case" readonly />
+                <label class="form-check-label" for="specialCase">{% trans 'Особый случай' %}</label>
+            </div>
+        </fieldset>
+        <fieldset class="col-md-6 col-lg-3">
+            <legend><small>{% trans 'Направление трубы' %}</small></legend>
+            <div class="form-check">
+                <input id="x" class="form-check-input" type="radio" name="pipe_direction" value="x"/>
+                <label class="form-check-label" for="x">{% trans 'X' %}</label>
+            </div>
+            <div class="form-check">
+                <input id="y" class="form-check-input" type="radio" name="pipe_direction" value="y"/>
+                <label class="form-check-label" for="y">{% trans 'Y' %}</label>
+            </div>
+            <div class="form-check">
+                <input id="z" class="form-check-input" type="radio" name="pipe_direction" value="z" readonly />
+                <label class="form-check-label" for="z">{% trans 'Z' %}</label>
+            </div>
+            <div class="form-check">
+                <input id="atAngle" class="form-check-input" type="radio" name="pipe_direction" value="at_angle"/>
+                <label class="form-check-label" for="atAngle">{% trans 'Под углом' %}</label>
+            </div>
+        </fieldset>
+        </div>
+    </fieldset>
+    -->
+    <fieldset class="mt-3">
+        <legend>{% trans 'Выбор пружины по жесткости и величине хода' %}</legend>
+        <fieldset>
+            <legend><small>{% trans 'FH/FS' %}</small></legend>
+            <div class="row">
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <label for="loadValue" class="form-label">{% trans 'Величина нагрузки' %}</label>
+                    <input class="form-control" id="loadValue" readonly>
+                </div>
+                <div class="mb-3">
+                    <label for="hotLoad" class="form-label">{% trans 'Горяч. нагр.' %}</label>
+                    <div class="input-group">
+                        <input class="form-control" id="hotLoad" readonly>
+                        <span class="input-group-text">[kN]</span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label for="coldLoad" class="form-label">{% trans 'Холод. нагр.' %}</label>
+                    <div class="input-group">
+                        <input class="form-control" id="coldLoad" readonly>
+                        <span class="input-group-text">[kN]</span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label for="springRate" class="form-label">{% trans 'Жестк. пруж.' %}</label>
+                    <div class="input-group">
+                        <input class="form-control" id="springRate" readonly>
+                        <span class="input-group-text">[N/mm]</span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label for="loadChainWeight" class="form-label">{% trans 'Вес грузовой цепи' %}</label>
+                    <div class="input-group">
+                        <input class="form-control" id="loadChainWeight" readonly>
+                        <span class="input-group-text">[kN]</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <label for="nominalStroke" class="form-label">{% trans 'Номинальная величина хода' %}</label>
+                    <div class="input-group">
+                        <input class="form-control" id="nominalStroke" readonly>
+                        <span class="input-group-text">[mm]</span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label for="setStrokeTo" class="form-label">{% trans 'Заданный ход' %}</label>
+                    <div class="input-group mb-1">
+                        <input class="form-control" id="setStrokeTo" readonly>
+                        <span class="input-group-text">[mm] На</span>
+                    </div>
+                    <div class="input-group">
+                        <input class="form-control" id="setStrokeFrom" readonly>
+                        <span class="input-group-text">[mm] От</span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label for="loadChange" class="form-label">{% trans 'Изменение нагрузки' %}</label>
+                    <div class="input-group">
+                        <input class="form-control" id="loadChange" readonly>
+                        <span class="input-group-text">[%]</span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label for="springReserveUp" class="form-label">{% trans 'Запас хода пружины' %}</label>
+                    <div class="input-group mb-1">
+                        <input class="form-control" id="springReserveUp" readonly>
+                        <span class="input-group-text">[mm] вверх</span>
+                    </div>
+                    <div class="input-group">
+                        <input class="form-control" id="springReserveDown" readonly>
+                        <span class="input-group-text">[mm] вниз</span>
+                    </div>
+                </div>
+            </div>
+            </div>
+
+            <div class="row mb-3">
+                <label for="type" class="col-md-2 col-form-label">{% trans 'Тип' %}...:</label>
+                <div class="col-md-10">
+                    <input class="form-control" id="type" readonly>
+                </div>
+            </div>
+
+            <div class="row mb-3">
+                <label for="minimumSpringTravel" class="col-md-2 col-form-label">{% trans 'Миним. запас хода пружины' %}:</label>
+                <div class="col-md-10">
+                    <div class="input-group">
+                        <input class="form-control" id="minimumSpringTravel" name="minimum_spring_travel" value="{{ form.minimum_spring_travel.value }}" />
+                        <span class="input-group-text">[mm]</span>
+                        <button type="submit" class="btn btn-primary">{% trans 'Обновить' %}</button>
+                    </div>
+                    {% if form.minimum_spring_travel.errors %}
+                        <div class="form-text text-danger">{{ form.minimum_spring_travel.errors.as_text }}</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="row mb-3">
+                <label for="springAlternativeVariants" class="col-md-2 col-form-label">{% trans 'Альтернативный вариант пружины' %}:</label>
+                <div class="col-md-10">
+                    <select id="springAlternativeVariants" class="form-select" {% if not loads %}disabled{% endif %}>
+                        {% for load in loads %}
+                        <option
+                            value="{{ forloop.counter0 }}"
+                            {% if load.id == best_load.id %}selected{% endif %}
+                        >
+                            {% if load.name == 'standard_series' %}
+                            {% trans 'W-серия' %} -
+                            {% elif load.name == 'l_series' %}
+                            {% trans 'L-серия' %} -
+                            {% endif %}
+                            {{ load.size }}-{{ load.rated_stroke }} {{ load.aspect }}% ({{ load.up_range }}mm вверх, {{ load.down_range }}mm вниз)
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+        </fieldset>
+    </fieldset>
+</form>
+{% endblock %}
+
+{% block js %}
+<script>
+    // Решение временное, в демонстративных целях
+    const suitableLoadsRaw = '{{ json_loads|safe }}';
+    const suitableLoads = JSON.parse(suitableLoadsRaw);
+
+    const springAlternativeVariants = document.getElementById("springAlternativeVariants");
+
+    const updateOutput = index => {
+        const load = suitableLoads[index];
+
+        const loadValue = document.getElementById("loadValue");
+        loadValue.value = load.size;
+
+        const hotLoad = document.getElementById("hotLoad");
+        hotLoad.value = load.hot_design_load;
+
+        const coldLoad = document.getElementById("coldLoad");
+        coldLoad.value = load.load_minus;
+
+        const springRate = document.getElementById("springRate");
+        springRate.value = load.spring_stiffness;
+
+        const nominalStroke = document.getElementById("nominalStroke");
+        nominalStroke.value = load.rated_stroke;
+
+        const setStrokeTo = document.getElementById("setStrokeTo");
+        setStrokeTo.value = load.movement_plus;
+
+        const setStrokeFrom = document.getElementById("setStrokeFrom");
+        setStrokeFrom.value = load.movement_minus;
+
+        const loadChange = document.getElementById("loadChange");
+        loadChange.value = load.aspect;
+
+        const springReserveUp = document.getElementById("springReserveUp");
+        springReserveUp.value = load.up_range;
+
+        const springReserveDown = document.getElementById("springReserveDown");
+        springReserveDown.value = load.down_range;
+
+        const type = document.getElementById("type");
+        type.value = `F.. ${load.size}.${load.rated_stroke}.${load.load_group_lgv}`;
+    }
+
+    const onVariantChange = e => {
+        const index = e.target.value;
+        updateOutput(index);
+    }
+
+    springAlternativeVariants.onchange = onVariantChange;
+    updateOutput(springAlternativeVariants.value);
+</script>
+{% endblock %}

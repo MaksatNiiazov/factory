@@ -1,0 +1,38 @@
+<div class="modal micromodal-slide">
+    <div class="modal__overlay" tabindex="-1">
+        <div class="modal__container" role="dialog">
+            <header class="modal__header">
+                <h5 class="modal__title">Проверка шаблона маркировки</h5>
+                <button class="modal__close" data-micromodal-close></button>
+            </header>
+            <div class="modal__content">
+                <form id="markingTemplateCheckForm" method="get">
+                <fieldset class="module aligned djn-module">
+                <div class="form-row">
+                    <div>
+                        <label>Введите данные параметров здесь</label>
+                        <textarea name="marking_template" class="marking-template-input"></textarea>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div>
+                        <label>Результат маркировки</label>
+                        <input id="markingTemplateResult" class="vTextField" type="text" readonly />
+                    </div>
+                </div>
+                </fieldset>
+                </form>
+            </div>
+            <footer class="modal__footer">
+                <input type="submit" form="markingTemplateCheckForm" value="Проверить" />
+                <input type="button" value="Закрыть" data-micromodal-close />
+            </footer>
+        </div>
+    </div>
+</div>
+<div class="marking-template row">
+    {% include "django/forms/widgets/input.html" %}
+    <div class="marking-template button">
+        <input onclick="markingTemplateTestOnClick(this)" type="button" value="Проверить" />
+    </div>
+</div>

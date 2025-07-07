@@ -1,0 +1,175 @@
+{% load static i18n django_bootstrap5 %}
+
+{% block js %}
+    {{ form.media }}
+
+    <script>
+    $('#id_ambient_temperature').change(function() {
+        $('#id_clamp_material').val(null).trigger('change');  // Сбросить значение clamp_material и перезагрузить варианты
+    });
+    </script>
+{% endblock %}
+
+{% if pji_id %}
+<form action="{% url 'projectitem' project.pk pji_id %}" method="POST">
+{% else %}
+<form action="{% url 'projectitem' project.pk 'new' %}" method="POST">
+{% endif %}
+
+    {% csrf_token %}
+
+    {% include 'ops/form_field_errors.html' with errors=form.errors %}
+
+    <div class="row g-3">
+        <div class="col-2">
+            {% bootstrap_field form.position_number %}
+        </div>
+        <div class="col-4">
+            {% bootstrap_field form.product_type %}
+        </div>
+        <div class="col-md-6">
+            {% bootstrap_field form.question_list %}
+        </div>
+    </div>
+    <div class="row g-3">
+        <div class="col-md-6">
+            {% bootstrap_field form.customer_marking %}
+        </div>
+        <div class="col-md-2">
+            {% bootstrap_field form.count %}
+        </div>
+    </div>
+    <div class="row g-3">
+        <div class="col-3">
+            {% bootstrap_field form.estimated_state %}
+        </div>
+        <div class="col-3">
+            {% bootstrap_field form.ambient_temperature %}
+        </div>
+    </div>
+    <div class="row g-3">
+        <div class="col-md-3">
+            {% bootstrap_field form.dn_standard %}
+        </div>
+        <div class="col-md-2">
+            {% bootstrap_field form.nominal_diameter %}
+        </div>
+        <div class="col-md-1" id="fill-dn-size" style="margin-top: 55px;"></div>
+        <div class="col-md-3">
+            {% bootstrap_field form.outer_diameter_special %}
+        </div>
+        <div class="col-md-1 fill-dn-special-size"></div>
+    </div>
+    <div class="row g-3">
+        <div class="col-md-3">
+            {% bootstrap_field form.insulation_thickness %}
+        </div>
+        <div class="col-3">
+            {% bootstrap_field form.clamp_material %}
+        </div>
+    </div>
+    <div class="row g-3">
+        <div class="col-md-2">
+            {% bootstrap_field form.chain_height %}
+        </div>
+        <div class="col-md-4">
+            {% bootstrap_field form.span %}
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-2" style="margin-top: 40px;">Нагрузка</div>
+        <div class="col-2">
+            {% bootstrap_field form.load_plus_x show_label=False placeholder='+X' %}
+        </div>
+        <div class="col-2">
+            {% bootstrap_field form.load_plus_y show_label=False placeholder='+Y' %}
+        </div>
+        <div class="col-2">
+            {% bootstrap_field form.load_plus_z show_label=False placeholder='+Z' %}
+        </div>
+    </div>
+    <div class="row g-3">
+        <div class="col-2"></div>
+        <div class="col-2 minus-margin-top">
+            {% bootstrap_field form.load_minus_x show_label=False placeholder='-X' %}
+        </div>
+        <div class="col-2 minus-margin-top">
+            {% bootstrap_field form.load_minus_y show_label=False placeholder='-Y' %}
+        </div>
+        <div class="col-2 minus-margin-top">
+            {% bootstrap_field form.load_minus_z show_label=False placeholder='-Z' %}
+        </div>
+    </div>
+    <div class="row g-3">
+        <div class="col-2">Дополнительная нагрузка (расчетная)</div>
+        <div class="col-2">
+            {% bootstrap_field form.additional_load_x show_label=False placeholder='X' %}
+        </div>
+        <div class="col-2">
+            {% bootstrap_field form.additional_load_y show_label=False placeholder='Y' %}
+        </div>
+        <div class="col-2">
+            {% bootstrap_field form.additional_load_z show_label=False placeholder='Z' %}
+        </div>
+    </div>
+    <div class="row g-3">
+        <div class="col-2">Испытательная нагрузка</div>
+        <div class="col-2">
+            {% bootstrap_field form.test_load_x show_label=False placeholder='X' %}
+        </div>
+        <div class="col-2">
+            {% bootstrap_field form.test_load_y show_label=False placeholder='Y' %}
+        </div>
+        <div class="col-2">
+            {% bootstrap_field form.test_load_z show_label=False placeholder='Z' %}
+        </div>
+        <div class="col-2">
+            {% bootstrap_button button_type="button" button_class='btn-sm btn-primary fit-spring' content="Подобрать" %}
+        </div>
+    </div>
+    <div class="row g-3">
+        <div class="col-2" style="margin-top: 40px;">Перемещения</div>
+        <div class="col-2">
+            {% bootstrap_field form.move_plus_x show_label=False placeholder='+X' %}
+        </div>
+        <div class="col-2">
+            {% bootstrap_field form.move_plus_y show_label=False placeholder='+Y' %}
+        </div>
+        <div class="col-2">
+            {% bootstrap_field form.move_plus_z show_label=False placeholder='+Z' %}
+        </div>
+    </div>
+    <div class="row g-3">
+        <div class="col-2"></div>
+        <div class="col-2 minus-margin-top">
+            {% bootstrap_field form.move_minus_x show_label=False placeholder='-X' %}
+        </div>
+        <div class="col-2 minus-margin-top">
+            {% bootstrap_field form.move_minus_y show_label=False placeholder='-Y' %}
+        </div>
+        <div class="col-2 minus-margin-top">
+            {% bootstrap_field form.move_minus_z show_label=False placeholder='Z' %}
+        </div>
+    </div>
+    <div class="row g-3">
+        <div>
+            {% bootstrap_field form.comment %}
+        </div>
+    </div>
+    <div class="row g-3">
+        <div class="col-4">
+            {% bootstrap_field form.spring_block_name %}
+        </div>
+        <div class="col-6" style="display: none;">
+            {% bootstrap_field form.tmp_spring %}
+        </div>
+    </div>
+    <div class="row g-3">
+        <div class="col-4">
+            {% bootstrap_button button_type="submit" button_class='btn-sm btn-success add-pji' content="Сохранить позицию проекта" %}
+        </div>
+    </div>
+</form>
+
+

@@ -1,0 +1,166 @@
+{% extends 'ops/base.html' %}
+{% load static i18n django_bootstrap5 %}
+
+{% block title %}Форма для эскиза{% endblock %}
+
+{% block content %}
+<form action="" method="POST" enctype="multipart/form-data" target="_blank">
+    {% csrf_token %}
+    <div class="row g-3">
+        <div class="col-md-2">
+            {% bootstrap_field form.project %}
+        </div>
+        <div class="col-md-6">
+            {% bootstrap_field form.question_list %}
+        </div>
+    </div>
+    <div class="row g-3">
+        <div class="col-2">
+            {% bootstrap_field form.position_number %}
+        </div>
+        <div class="col-4">
+            {% bootstrap_field form.tag %}
+        </div>
+        <div class="col-md-2">
+            {% bootstrap_field form.qty %}
+        </div>
+    </div>
+    <div class="row g-3">
+        <div class="col-md-6">
+            {% bootstrap_field form.name %}
+        </div>
+        <div class="col-md-6">
+            {% bootstrap_field form.marking %}
+        </div>
+    </div>
+    <div class="row g-3">
+         <div class="col-2">
+           {% bootstrap_field form.state %}
+        </div>
+        <div class="col-2">
+           {% bootstrap_field form.temperature %}
+        </div>
+        </div>
+    <div class="row g-3">
+        <div class="col-md-2">
+            {% bootstrap_field form.dn_standard %}
+        </div>
+        <div class="col-md-2">
+            {% bootstrap_field form.dn %}
+        </div>
+        <div class="col-md-2">
+            {% bootstrap_field form.dn_non_standard %}
+        </div>
+        <div class="col-md-2">
+            {% bootstrap_field form.isolation_thickness %}
+        </div>
+        <div class="col-md-2">
+            {% bootstrap_field form.chain_height %}
+        </div>
+    </div>
+    <div class="row g-3">
+        <div class="col-2">
+            {% bootstrap_field form.hot_load %}
+        </div>
+        <div class="col-2">
+            {% bootstrap_field form.cold_load %}
+        </div>
+        <div class="col-2">
+            {% bootstrap_field form.spring_rate %}
+        </div>
+        <div class="col-2">
+            {% bootstrap_field form.load_change %}
+        </div>
+        <div class="col-2">
+            {% bootstrap_field form.load_control %}
+        </div>
+    </div>
+    <div class="row g-3">
+        <div class="col-2">Запас хода пружины, мм</div>
+        <div class="col-2">
+            {% bootstrap_field form.reserve_up show_label=False placeholder='Верхний' %}
+        </div>
+        <div class="col-2">
+            {% bootstrap_field form.reserve_down show_label=False placeholder='Нижний' %}
+        </div>
+        <div class="col-2">Диапазон рег-ки, мм</div>
+        <div class="col-1">
+            {% bootstrap_field form.range show_label=False%}
+        </div>
+    </div>
+    <div class="row g-3">
+        <div class="col-2">Перемещения, мм</div>
+        <div class="col-1">
+            {% bootstrap_field form.move_x show_label=False placeholder='X' %}
+        </div>
+        <div class="col-1">
+            {% bootstrap_field form.move_y show_label=False placeholder='Y' %}
+        </div>
+        <div class="col-1">
+            {% bootstrap_field form.move_z show_label=False placeholder='Z' %}
+        </div>
+        </div>
+    <div class="row g-3">
+        <div class="col-2">Нагрузки, kH</div>
+        <div class="col-1">
+            {% bootstrap_field form.load_x show_label=False placeholder='X' %}
+        </div>
+        <div class="col-1">
+            {% bootstrap_field form.load_y  show_label=False placeholder='Y' %}
+        </div>
+        <div class="col-1">
+            {% bootstrap_field form.load_z  show_label=False placeholder='Z' %}
+        </div>
+        </div>
+    <div class="row g-3">
+        <div class="col-2">При испытаниях, kH</div>
+        <div class="col-1">
+            {% bootstrap_field form.test_load_x show_label=False placeholder='X' %}
+        </div>
+        <div class="col-1">
+            {% bootstrap_field form.test_load_y  show_label=False placeholder='Y' %}
+        </div>
+        <div class="col-1">
+            {% bootstrap_field form.test_load_z  show_label=False placeholder='Z' %}
+        </div>
+    </div>
+    <div class="row g-3">
+        <div class="col-8">
+            {% bootstrap_field form.image layout='horizontal' %}
+        </div>
+        </div>
+    <div class="row g-3">
+        <div class="col-8">
+            {% bootstrap_field form.comment %}
+        </div>
+    </div>
+     <div class="row g-3">
+        <div class="col-2">
+            {% bootstrap_button button_type="button" button_class='btn-sm btn-success add-position' content="+" %}
+        </div>
+     </div>
+    <table class="table table-hover">
+        <thead>
+        <tr>
+            <th class="width9">Позиция</th>
+            <th class="width30">Обозначение</th>
+            <th class="width30">Наименование</th>
+            <th class="width22">Материал</th>
+            <th class="width9">Количество</th>
+        </tr>
+        </thead>
+        <tbody></tbody></table>
+    <div class="row g-3">
+        {% for sp_field, visible in form.get_specification_fields %}
+            <div class="{{ visible }}">
+                {% bootstrap_field sp_field show_label=False %}
+            </div>
+        {% endfor %}
+    </div>
+    <div class="row g-3">
+        <div class="col-2">
+            {% bootstrap_button button_type="submit" content="Создать эскиз" %}
+        </div>
+    </div>
+</form>
+{% endblock %}

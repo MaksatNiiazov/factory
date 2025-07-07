@@ -1,0 +1,65 @@
+{% load static i18n django_bootstrap5 %}
+
+<form action="{% url 'tmp_composition' pji.pk %}" method="POST">
+    {% csrf_token %}
+    {{ formset.management_form }}
+    {% include 'ops/formset_errors.html' with errors=formset.errors %}
+    {% if not formset|length == 0 %}
+        <table class="table table-hover" id="tmp_composition_table">
+            <thead>
+            <tr>
+                <th class="width4">Позиция</th>
+                <th class="width40">Обозначение</th>
+                <th class="width22">Материал</th>
+                <th class="width4">Количество</th>
+                <th><i class="bi bi-trash" title="Удалить"></i></th>
+                <th>
+                    <div class="col-2">
+                        {% bootstrap_button button_type="button" button_class='btn-sm btn-success' id='add_tmp_parent_row' content="+" %}
+                    </div>
+                </th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr class="addtablerow-default-tr">
+                <td>{% bootstrap_field formset.empty_form.position show_label=False %}</td>
+                <td>{% bootstrap_field  formset.empty_form.tmp_child show_label=False %}</td>
+                <td>{% bootstrap_field  formset.empty_form.material show_label=False %}</td>
+                <td>{% bootstrap_field  formset.empty_form.count show_label=False %}</td>
+                <td><i class="bi bi-trash addtablerow-remove-row"></i></td>
+                <td></td>
+            </tr>
+            {% for tc_form in formset %}
+            <tr class="{% if formpi.errors %}danger{% endif %}">
+                <td>{% bootstrap_field tc_form.position show_label=False %}</td>
+                <td>{% bootstrap_field tc_form.tmp_child show_label=False %}</td>
+                <td>{% bootstrap_field tc_form.material show_label=False %}</td>
+                <td>{% bootstrap_field tc_form.count show_label=False %}</td>
+                {% if formset.can_delete %}
+                    <td class="col-2">{{ tc_form.DELETE }}</td>
+                {% endif %}
+                <td>{{ tc_form.id }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        <div class="col-4">
+            {% bootstrap_button button_type="submit" button_class='btn-sm btn-light' content="Сохранить спецификацию позиции проекта" %}
+        </div>
+    {% endif %}
+</form>
+
+<script>
+    // Добавит номер позиции по умолчанию, при удалении номер исправлять вручную
+    function add_pos_num (last_pos_num) {
+        const totalFormsInput = $('#id_tmp_parent-TOTAL_FORMS');
+		const form_idx = parseInt(totalFormsInput.val());
+		const new_pos_num = form_idx - 1;
+		$("#id_tmp_parent-" + new_pos_num + "-position").val(form_idx);
+    };
+
+    // нажатие на "добавить позицию" в таблице - спецификации
+    $("#add_tmp_parent_row").bind( 'click', function(){
+        $('#tmp_composition_table').addtablerow({'after_add_tr': add_pos_num}, 'tmp_parent');
+    });
+</script>

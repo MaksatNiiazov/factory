@@ -1,0 +1,123 @@
+{% extends 'ops/base.html' %}
+{% load static i18n django_bootstrap5 %}
+
+{% block title %}Проект{% endblock %}
+
+{% block head %}
+<style>
+.spinner {
+    animation: spin 1s linear infinite;
+    display: inline-block;
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% if messages %}
+<div class="messages-container">
+    {% for message in messages %}
+    {% if message.tags == 'error' %}
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+    {% elif message.tags == 'success' %}
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+    {% elif message.tags == 'warning' %}
+        <div class="alert alert-warning alert-dismissible fade show" role="alert">
+    {% elif message.tags == 'info' %}
+        <div class="alert alert-info alert-dismissible fade show" role="alert">
+    {% else %}
+        <div class="alert alert-secondary alert-dismissible fade show" role="alert">
+    {% endif %}
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<div>
+<form action="" method="POST" id="project_form">
+    {% csrf_token %}
+    {% include 'ops/form_field_errors.html' with errors=form.errors %}
+    <div class="row g-3">
+        <div class="col-md-2">
+            {% bootstrap_field project_form.number %}
+        </div>
+        <div class="col-md-6">
+            {% bootstrap_field project_form.contragent %}
+        </div>
+        <div class="col-md-2">
+           {% bootstrap_button "Сохранить проект" button_type="submit" size='sm' button_class='btn-success' extra_classes='form-control button-margin'%}
+        </div>
+        <div class="col-md-2" data-pid='{{ project.pk }}'>
+            {% if project.pk %}
+                {% bootstrap_button "Добавить позицию" button_type="button" size='sm' button_class='btn-secondary' extra_classes='form-control add-pji button-margin'%}
+            {% endif %}
+        </div>
+    </div>
+</form>
+</div>
+
+<div class="col d-flex justify-content-end mt-0" data-pid="{{ project.pk }}">
+    <div class="col-2">
+        {% if project.pk %}
+        <form method="POST" enctype="multipart/form-data" action="{% url 'import_project' project.pk %}" id="import-form">
+            {% csrf_token %}
+            <input type="file" name="import_file" id="import-file" class="d-none" onchange="handleFileSelect()">
+            <button type="button" class="btn form-control btn-primary" id="import-button" onclick="triggerFileInput()">
+                <span id="import-icon" class="bi bi-save"></span> Импортировать проект
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+    function triggerFileInput() {
+        document.getElementById('import-file').click();
+    }
+
+    function handleFileSelect() {
+        const importButton = document.getElementById('import-button');
+        const importIcon = document.getElementById('import-icon');
+
+        importIcon.className = 'bi bi-arrow-clockwise spinner';
+
+        document.getElementById('import-form').submit();
+    }
+</script>
+
+{% if project.pk %}
+<div class="row g-3 mt-5">
+    <div class="col-3">
+        <h4>Позиции проекта</h4>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-4">
+        <div id="projectitem_list">{% include 'ops/projectitem_list.html' with object_list=object_list %}</div>
+    </div>
+    <div class="col-8">
+        <div class="row g-3">
+            <div id="required-project_item"></div>
+        </div>
+        <div class="row g-3">
+            <div id="pji_tmp_composition"></div>
+        </div>
+    </div>
+</div>
+
+
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,14 @@
+{% extends 'ops/base.html' %}
+{% load i18n crispy_forms_tags %}
+
+{% block title %}{% trans 'Вход в систему' %}{% endblock %}
+
+{% block content %}
+<h1>{% trans 'Вход в систему' %}</h1>
+<div class="mt-5">
+    {% crispy form %}
+</div>
+<div class="mt-1 text-center">
+    <a href="{% url 'register' %}">Регистрация</a>
+</div>
+{% endblock %}

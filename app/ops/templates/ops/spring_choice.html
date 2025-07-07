@@ -1,0 +1,175 @@
+{% load static i18n django_bootstrap5 %}
+
+<form action="" method="post">
+    {% csrf_token %}
+    <fieldset class="mt-3">
+        <legend>{% trans 'Выбор пружины по жесткости и величине хода' %}</legend>
+        <fieldset>
+            <legend><small>{% trans 'FH/FS' %}</small></legend>
+            <div class="row">
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <label for="loadValue" class="form-label">{% trans 'Размер пружинного блока' %}</label>
+                    <input class="form-control" id="loadValue" readonly>
+                </div>
+                <div class="mb-3">
+                    <label for="hotLoad" class="form-label">{% trans 'Горяч. нагр.' %}</label>
+                    <div class="input-group">
+                        <input class="form-control" id="hotLoad" readonly>
+                        <span class="input-group-text">[kN]</span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label for="coldLoad" class="form-label">{% trans 'Холод. нагр.' %}</label>
+                    <div class="input-group">
+                        <input class="form-control" id="coldLoad" readonly>
+                        <span class="input-group-text">[kN]</span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label for="springRate" class="form-label">{% trans 'Жестк. пруж.' %}</label>
+                    <div class="input-group">
+                        <input class="form-control" id="springRate" readonly>
+                        <span class="input-group-text">[N/mm]</span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label for="loadChainWeight" class="form-label">{% trans 'Вес грузовой цепи' %}</label>
+                    <div class="input-group">
+                        <input class="form-control" id="loadChainWeight" readonly>
+                        <span class="input-group-text">[kN]</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <label for="nominalStroke" class="form-label">{% trans 'Номинальная величина хода' %}</label>
+                    <div class="input-group">
+                        <input class="form-control" id="nominalStroke" readonly>
+                        <span class="input-group-text">[mm]</span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label for="setStrokeTo" class="form-label">{% trans 'Заданный ход' %}</label>
+                    <div class="input-group mb-1">
+                        <input class="form-control" id="setStrokeTo" readonly>
+                        <span class="input-group-text">[mm] На</span>
+                    </div>
+                    <div class="input-group">
+                        <input class="form-control" id="setStrokeFrom" readonly>
+                        <span class="input-group-text">[mm] От</span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label for="loadChange" class="form-label">{% trans 'Изменение нагрузки' %}</label>
+                    <div class="input-group">
+                        <input class="form-control" id="loadChange" readonly>
+                        <span class="input-group-text">[%]</span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label for="springReserveUp" class="form-label">{% trans 'Запас хода пружины' %}</label>
+                    <div class="input-group mb-1">
+                        <input class="form-control" id="springReserveUp" readonly>
+                        <span class="input-group-text">[mm] вверх</span>
+                    </div>
+                    <div class="input-group">
+                        <input class="form-control" id="springReserveDown" readonly>
+                        <span class="input-group-text">[mm] вниз</span>
+                    </div>
+                </div>
+            </div>
+            </div>
+            <input class="form-control" id="load_group_lgv" hidden="">
+            <div class="row mb-3">
+                <label for="type" class="col-md-2 col-form-label">{% trans 'Тип' %}...:</label>
+                <div class="col-md-10">
+                    <input class="form-control" id="spring_type" readonly>
+                </div>
+            </div>
+
+            <div class="row mb-3">
+                <label for="springAlternativeVariants" class="col-md-2 col-form-label">{% trans 'Альтернативный вариант пружины' %}:</label>
+                <div class="col-md-10">
+                    <select id="springAlternativeVariants" class="form-select" {% if not loads %}disabled{% endif %}>
+                        {% for load in loads %}
+                        <option value="{{ forloop.counter0 }}" {% if load.id == best_load.id %}selected{% endif %}>
+                            {% if load.name == 'standard_series' %}
+                            {% trans 'W-серия' %} -
+                            {% elif load.name == 'l_series' %}
+                            {% trans 'L-серия' %} -
+                            {% endif %}
+                            {{ load.size }}-{{ load.rated_stroke }} {{ load.aspect }}% ({{ load.up_range }}mm вверх, {{ load.down_range }}mm вниз)
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+        </fieldset>
+    </fieldset>
+
+<button type="submit" class="btn btn-primary" name="save">Отправить</button>
+</form>
+<script>
+    // Решение временное, в демонстративных целях
+    const suitableLoadsRaw = '{{ json_loads|safe }}';
+    const suitableLoads = JSON.parse(suitableLoadsRaw);
+    const pt_name = '{{ pt_name }}';
+
+    const springAlternativeVariants = document.getElementById("springAlternativeVariants");
+
+    const updateOutput = index => {
+        const load = suitableLoads[index];
+
+        const loadValue = document.getElementById("loadValue");
+        loadValue.value = load.size;
+
+        const hotLoad = document.getElementById("hotLoad");
+        hotLoad.value = load.hot_design_load;
+
+        const coldLoad = document.getElementById("coldLoad");
+        coldLoad.value = load.load_minus;
+
+        const springRate = document.getElementById("springRate");
+        springRate.value = load.spring_stiffness;
+
+        const nominalStroke = document.getElementById("nominalStroke");
+        nominalStroke.value = load.rated_stroke;
+
+        const setStrokeTo = document.getElementById("setStrokeTo");
+        setStrokeTo.value = load.movement_plus;
+
+        const setStrokeFrom = document.getElementById("setStrokeFrom");
+        setStrokeFrom.value = load.movement_minus;
+
+        const loadChange = document.getElementById("loadChange");
+        loadChange.value = load.aspect;
+
+        const springReserveUp = document.getElementById("springReserveUp");
+        springReserveUp.value = load.up_range;
+
+        const springReserveDown = document.getElementById("springReserveDown");
+        springReserveDown.value = load.down_range;
+
+        const load_group_lgv = document.getElementById("load_group_lgv");
+        load_group_lgv.value = load.load_group_lgv;
+
+        let series_name = null;
+        if(load.name == 'standard_series') {
+            series_name = '';
+        } else if (load.name == 'l_series') {
+            series_name = '-L';  // Маркировку по примеру FHD-L будем показывать только для L-типа
+        }
+
+        const spring_type = document.getElementById("spring_type");
+        spring_type.value = `${pt_name}${series_name} ${load.size}.${load.rated_stroke}.${load.load_group_lgv}`;
+    }
+
+    const onVariantChange = e => {
+        const index = e.target.value;
+        updateOutput(index);
+    }
+
+    springAlternativeVariants.onchange = onVariantChange;
+    updateOutput(springAlternativeVariants.value);
+</script>

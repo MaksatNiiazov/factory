@@ -1,0 +1,13 @@
+.marking-template.row {
+    display: flex;
+    align-items: center;
+}
+
+.marking-template.button {
+    margin-left: 10px;
+}
+
+.marking-template-input {
+    width: 90%;
+    height: 64px;
+}

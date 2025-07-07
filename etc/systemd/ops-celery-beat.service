@@ -1,0 +1,21 @@
+[Unit]
+Description=ops celery beat service
+After=network.target redis.service
+
+[Service]
+Type=simple
+User=ops
+Group=ops
+EnvironmentFile=/etc/conf.d/ops.conf
+RuntimeDirectory=ops
+#WorkingDirectory=/opt/celery
+
+ExecStart=/bin/sh -c '${CELERY_BIN} -A ${CELERY_APP} beat \
+    --pidfile=${CELERYBEAT_PID_FILE} \
+    --schedule=${CELERYBEAT_SCHEDULE} \
+    --logfile=${CELERYBEAT_LOG_FILE} --loglevel=${CELERYBEAT_LOG_LEVEL}'
+#ExecStop=/bin/systemctl kill slb-celery-beat.service
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,37 @@
+{% load static i18n django_bootstrap5 %}
+<table class="table table-hover" id="project_projectitems">
+    <thead>
+    <tr>
+        <th><input type='checkbox' class='pick_all' title="Выбрать все"></th>
+        <th>№</th>
+        <th>Tag</th>
+        <th>Количество</th>
+        <th></th>
+        <th></th>
+    </tr>
+    </thead>
+    <tbody>
+    {% for pji in object_list %}
+    <tr>
+        <td><input type='checkbox' name='make_file' id="{{ pji.pk }}"></td>
+        <td>{{ pji.position_number }}</td>
+        <td class="show-pji" data-pid-id="{{ project.pk }}" data-pji-id="{{ pji.id }}"
+            id="{% if pji.id == last_pji %}last{% endif %}"
+            style="color: #4080c0">{{ pji.tag_id }}
+        </td>
+        <td>{{ pji.count }}</td>
+        <td><a href="{% url 'copy_pji' pji.pk %}"><i class="bi bi-copy" title="Копировать"></i></a></td>
+        <td><a href="{% url 'delete_pji' pji.pk %}"><i class="bi bi-trash" title="Удалить"></i></a></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% if object_list %}
+<div class="center-load-button">
+    {% bootstrap_button button_type="link" content="Сохранить в svg" button_class="btn-info" id="svg-load"%}
+    {% bootstrap_button button_type="link" content="Сохранить в pdf" button_class="btn-primary " id="pdf-load" %}
+</div>
+<div class="center-load-button">
+{% bootstrap_button button_type="link" content="Сохранить в PDF (Новый)" button_class="btn-primary" id="pdf-new-load" %}
+</div>
+{% endif %}

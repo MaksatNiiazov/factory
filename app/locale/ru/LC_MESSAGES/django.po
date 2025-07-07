@@ -1,0 +1,1366 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2023-12-06 01:15+0500\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=4; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
+"n%10<=4 && (n%100<12 || n%100>14) ? 1 : n%10==0 || (n%10>=5 && n%10<=9) || "
+"(n%100>=11 && n%100<=14)? 2 : 3);\n"
+
+#: catalog/api/serializers.py:11
+msgid "Наименование элемента"
+msgstr ""
+
+#: catalog/apps.py:8
+msgid "Справочники"
+msgstr ""
+
+#: catalog/models.py:14 catalog/models.py:22 catalog/models.py:38
+#: ops/models.py:443
+msgid "Номинальный диаметр"
+msgstr ""
+
+#: catalog/models.py:23
+msgid "Номинальные диаметры"
+msgstr ""
+
+#: catalog/models.py:29
+msgid "А"
+msgstr ""
+
+#: catalog/models.py:30
+msgid "Б"
+msgstr ""
+
+#: catalog/models.py:31
+msgid "В"
+msgstr ""
+
+#: catalog/models.py:35 ops/forms.py:117
+msgid "РФ"
+msgstr ""
+
+#: catalog/models.py:36 ops/forms.py:117
+msgid "EN"
+msgstr ""
+
+#: catalog/models.py:40 ops/models.py:459 ops/models.py:610
+msgid "Исполнение"
+msgstr ""
+
+#: catalog/models.py:42 ops/forms.py:118
+msgid "Стандарт"
+msgstr ""
+
+#: catalog/models.py:43
+msgid "Фактический размер, мм"
+msgstr ""
+
+#: catalog/models.py:51
+msgid "Номинальный диаметр трубы"
+msgstr ""
+
+#: catalog/models.py:52
+msgid "Номинальные диаметры труб"
+msgstr ""
+
+#: catalog/models.py:60
+msgid "LGV"
+msgstr ""
+
+#: catalog/models.py:61 ops/models.py:53
+msgid "kN"
+msgstr ""
+
+#: catalog/models.py:66
+msgid "нагрузочная группа"
+msgstr ""
+
+#: catalog/models.py:67
+msgid "нагрузочные группы"
+msgstr ""
+
+#: catalog/models.py:74 catalog/models.py:89 kernel/models.py:10
+#: ops/models.py:319 ops/models.py:361 ops/models.py:617
+msgid "Наименование"
+msgstr ""
+
+#: catalog/models.py:75 ops/models.py:488
+msgid "Группа"
+msgstr ""
+
+#: catalog/models.py:80
+msgid "материал"
+msgstr ""
+
+#: catalog/models.py:81
+msgid "материалы"
+msgstr ""
+
+#: catalog/models.py:88
+msgid "Числовое значение"
+msgstr ""
+
+#: catalog/models.py:90
+msgid "Описание"
+msgstr ""
+
+#: catalog/models.py:95
+msgid "тип покрытия"
+msgstr ""
+
+#: catalog/models.py:96
+msgid "типы покрытии"
+msgstr ""
+
+#: kernel/admin.py:12
+msgid "Applications"
+msgstr ""
+
+#: kernel/admin.py:13 kernel/admin.py:14
+msgid "OPS Administration"
+msgstr ""
+
+#: kernel/admin.py:45
+msgid "ФИО"
+msgstr ""
+
+#: kernel/admin.py:49 kernel/models.py:47 ops/models.py:77
+msgid "Статус"
+msgstr ""
+
+#: kernel/admin.py:60
+msgid "Personal info"
+msgstr "Персональные данные"
+
+#: kernel/admin.py:61
+msgid "Permissions"
+msgstr "Разрешения"
+
+#: kernel/admin.py:62
+msgid "Important dates"
+msgstr "Важные даты"
+
+#: kernel/admin.py:63
+msgid "Техническая информация"
+msgstr ""
+
+#: kernel/api/authentication.py:36
+msgid "Invalid token."
+msgstr "Невалидный токен."
+
+#: kernel/api/authentication.py:41
+msgid "Token is expired."
+msgstr "Токен истек."
+
+#: kernel/api/authentication.py:44
+msgid "User inactive or deleted."
+msgstr "Пользователь неактивный или удален."
+
+#: kernel/api/serializers.py:36 kernel/api/serializers.py:100 ops/forms.py:21
+#: ops/forms.py:37
+msgid "Пароль"
+msgstr ""
+
+#: kernel/api/serializers.py:37
+msgid "Разрешения"
+msgstr ""
+
+#: kernel/api/serializers.py:38
+msgid "Активный"
+msgstr ""
+
+#: kernel/api/serializers.py:63
+msgid "Тип детали/изделия"
+msgstr ""
+
+#: kernel/api/serializers.py:65
+msgid "Список атрибутов"
+msgstr ""
+
+#: kernel/api/serializers.py:73
+#, python-brace-format
+msgid "Язык {value} отсутствует в списке поддерживаемых языков: {locales_f}"
+msgstr ""
+
+#: kernel/api/serializers.py:82
+#, python-brace-format
+msgid "Временная зона {value} отсутствует в списке временных зон"
+msgstr ""
+
+#: kernel/api/serializers.py:88
+msgid "Язык"
+msgstr ""
+
+#: kernel/api/serializers.py:92
+msgid "Временная зона"
+msgstr ""
+
+#: kernel/api/serializers.py:99 ops/forms.py:20
+msgid "Логин"
+msgstr ""
+
+#: kernel/api/views.py:188
+#, python-brace-format
+msgid "Следующие атрибуты являются не существующими: {wrong_attributes}"
+msgstr ""
+
+#: kernel/apps.py:8
+msgid "Основные"
+msgstr ""
+
+#: kernel/erp.py:23
+msgid "Не указан базовый URL в настройке"
+msgstr ""
+
+#: kernel/erp.py:26
+msgid "Не указан логин к системе ERP"
+msgstr ""
+
+#: kernel/erp.py:29
+msgid "Не указан пароль к системе ERP"
+msgstr ""
+
+#: kernel/models.py:11
+msgid "Внешний идентификатор (CRM)"
+msgstr ""
+
+#: kernel/models.py:13
+msgid "ИНН"
+msgstr ""
+
+#: kernel/models.py:14
+msgid "КПП"
+msgstr ""
+
+#: kernel/models.py:15
+msgid "Банк"
+msgstr ""
+
+#: kernel/models.py:16
+msgid "Расс. счет"
+msgstr ""
+
+#: kernel/models.py:17
+msgid "БИК"
+msgstr ""
+
+#: kernel/models.py:18
+msgid "Корр. счет"
+msgstr ""
+
+#: kernel/models.py:20
+msgid "Файлы"
+msgstr ""
+
+#: kernel/models.py:20
+msgid "Свидетельство о регистрации"
+msgstr ""
+
+#: kernel/models.py:25
+msgid "организация"
+msgstr ""
+
+#: kernel/models.py:26
+msgid "организации"
+msgstr ""
+
+#: kernel/models.py:37
+msgid "Внутренний пользователь"
+msgstr ""
+
+#: kernel/models.py:38
+msgid "Внешний пользователь"
+msgstr ""
+
+#: kernel/models.py:43
+msgid "Организация"
+msgstr ""
+
+#: kernel/models.py:46
+msgid "Отчество"
+msgstr ""
+
+#: kernel/models.py:51
+msgid "Логин в CRM"
+msgstr ""
+
+#: kernel/models.py:51
+msgid "Для внутреннего пользователя"
+msgstr ""
+
+#: kernel/models.py:54
+msgid "Конфигурация UI"
+msgstr ""
+
+#: kernel/views.py:9
+msgid "OPS"
+msgstr ""
+
+#: kernel/views.py:10
+msgid "Привет, мир!"
+msgstr ""
+
+#: ops/admin.py:23
+msgid "Нагрузка и перемещения"
+msgstr ""
+
+#: ops/admin.py:31
+msgid "Входные параметры пружины"
+msgstr ""
+
+#: ops/admin.py:32
+msgid "Данные трубы"
+msgstr ""
+
+#: ops/admin.py:57
+msgid "Единицы измерения проекта"
+msgstr ""
+
+#: ops/admin.py:58 ops/admin.py:170
+msgid "Важные даты"
+msgstr ""
+
+#: ops/admin.py:167
+msgid "Тип детали и исполнение"
+msgstr ""
+
+#: ops/admin.py:168 ops/models.py:633
+msgid "Параметры"
+msgstr ""
+
+#: ops/admin.py:169
+msgid "Синхронизация"
+msgstr ""
+
+#: ops/api/exceptions.py:9
+msgid "Произошла ошибка при взаимодействии ERP"
+msgstr ""
+
+#: ops/api/serializers.py:92 ops/models.py:485
+msgid "Список"
+msgstr ""
+
+#: ops/api/serializers.py:145
+msgid "JSON-параметры"
+msgstr ""
+
+#: ops/api/serializers.py:146 ops/models.py:363
+msgid "Шаблон маркировки"
+msgstr ""
+
+#: ops/api/serializers.py:150 ops/forms.py:88
+msgid "Нагрузка (-)"
+msgstr ""
+
+#: ops/api/serializers.py:151 ops/forms.py:89
+msgid "Перемещение (+)"
+msgstr ""
+
+#: ops/api/serializers.py:152 ops/forms.py:90
+msgid "Перемещение (-)"
+msgstr ""
+
+#: ops/api/serializers.py:153
+msgid "Минимальный запас хода"
+msgstr ""
+
+#: ops/api/serializers.py:154 ops/forms.py:86 ops/templates/ops/index.html:57
+#: ops/templates/ops/index.html:283 ops/templates/ops/spring_choice.html:98
+msgid "Стандартная серия"
+msgstr ""
+
+#: ops/api/serializers.py:155 ops/forms.py:87 ops/templates/ops/index.html:64
+#: ops/templates/ops/index.html:285 ops/templates/ops/spring_choice.html:100
+msgid "L-серия"
+msgstr ""
+
+#: ops/api/serializers.py:162 ops/forms.py:98
+msgid "Нельзя указать оба перемещения"
+msgstr ""
+
+#: ops/api/serializers.py:165 ops/forms.py:101
+msgid "Необходимо выбрать один из перемещении"
+msgstr ""
+
+#: ops/api/serializers.py:171 ops/forms.py:107
+msgid "Укажите хотя бы одну из серии"
+msgstr ""
+
+#: ops/forms.py:29 ops/templates/ops/layouts/navbar.html:32
+msgid "Вход"
+msgstr ""
+
+#: ops/forms.py:34
+msgid "Фамилия"
+msgstr ""
+
+#: ops/forms.py:35
+msgid "Имя"
+msgstr ""
+
+#: ops/forms.py:36
+msgid "Электронная почта"
+msgstr ""
+
+#: ops/forms.py:38
+msgid "Подтверждение пароля"
+msgstr ""
+
+#: ops/forms.py:49
+msgid "Регистрация"
+msgstr ""
+
+#: ops/forms.py:57
+msgid "Пользователь с таким почтовым адресом уже существует"
+msgstr ""
+
+#: ops/forms.py:67
+msgid "Пароли совпадают"
+msgstr ""
+
+#: ops/forms.py:91
+msgid "Минимальный запас ход"
+msgstr ""
+
+#: ops/forms.py:117
+msgid "Нестандартный"
+msgstr ""
+
+#: ops/forms.py:122
+msgid "Подобранное изделие"
+msgstr ""
+
+#: ops/forms.py:157
+msgid "Укажите расстояние между опорами"
+msgstr ""
+
+#: ops/models.py:44
+msgid "Черновик"
+msgstr ""
+
+#: ops/models.py:45
+msgid "Отправлен"
+msgstr ""
+
+#: ops/models.py:46
+msgid "Корзина"
+msgstr ""
+
+#: ops/models.py:60
+msgid "mm"
+msgstr ""
+
+#: ops/models.py:68
+msgid "C"
+msgstr ""
+
+#: ops/models.py:69
+msgid "F"
+msgstr ""
+
+#: ops/models.py:72 ops/models.py:111
+msgid "Проект CRM"
+msgstr ""
+
+#: ops/models.py:73
+msgid "Контрагент"
+msgstr ""
+
+#: ops/models.py:75
+msgid "Владелец"
+msgstr ""
+
+#: ops/models.py:80
+msgid "Единица измерения: Нагрузка"
+msgstr ""
+
+#: ops/models.py:81
+msgid "Единица измерения: Перемещение"
+msgstr ""
+
+#: ops/models.py:83
+msgid "Единица измерения: Температура"
+msgstr ""
+
+#: ops/models.py:89
+msgid "проект"
+msgstr ""
+
+#: ops/models.py:90
+msgid "проекты"
+msgstr ""
+
+#: ops/models.py:92
+msgid "Может создавать свои проекты"
+msgstr ""
+
+#: ops/models.py:93
+msgid "Может изменить свои проекты"
+msgstr ""
+
+#: ops/models.py:94
+msgid "Может удалить свои проекты"
+msgstr ""
+
+#: ops/models.py:95
+msgid "Может видеть свои проекты"
+msgstr ""
+
+#: ops/models.py:103
+#, python-brace-format
+msgid "Проект #{self.number} пользователя {self.owner}"
+msgstr ""
+
+#: ops/models.py:112
+msgid "Номер позиции"
+msgstr ""
+
+#: ops/models.py:114
+msgid "Оригинальное изделие/деталь"
+msgstr ""
+
+#: ops/models.py:117
+msgid "Выбранная пружина"
+msgstr ""
+
+#: ops/models.py:118
+msgid "Маркировка заказчика"
+msgstr ""
+
+#: ops/models.py:119
+msgid "ОЛ заказчика"
+msgstr ""
+
+#: ops/models.py:122 ops/models.py:753 ops/models.py:783 ops/models.py:816
+msgid "Количество"
+msgstr ""
+
+#: ops/models.py:129
+msgid "Холодная нагрузка"
+msgstr ""
+
+#: ops/models.py:130
+msgid "Горячая нагрузка"
+msgstr ""
+
+#: ops/models.py:137
+msgid "Горизонтальное"
+msgstr ""
+
+#: ops/models.py:138
+msgid "Вертикальное"
+msgstr ""
+
+#: ops/models.py:150 ops/templates/ops/index.html:167
+msgid "Под углом"
+msgstr ""
+
+#: ops/models.py:154
+msgid "Нагрузка +X"
+msgstr ""
+
+#: ops/models.py:155
+msgid "Нагрузка +Y"
+msgstr ""
+
+#: ops/models.py:156
+msgid "Нагрузка +Z"
+msgstr ""
+
+#: ops/models.py:158
+msgid "Нагрузка -X"
+msgstr ""
+
+#: ops/models.py:159
+msgid "Нагрузка -Y"
+msgstr ""
+
+#: ops/models.py:160
+msgid "Нагрузка -Z"
+msgstr ""
+
+#: ops/models.py:162
+msgid "Дополнительная нагрузка (расчетная) X"
+msgstr ""
+
+#: ops/models.py:163
+msgid "Дополнительная нагрузка (расчетная) Y"
+msgstr ""
+
+#: ops/models.py:164
+msgid "Дополнительная нагрузка (расчетная) Z"
+msgstr ""
+
+#: ops/models.py:166
+msgid "Испытательная нагрузка X"
+msgstr ""
+
+#: ops/models.py:167
+msgid "Испытательная нагрузка Y"
+msgstr ""
+
+#: ops/models.py:168
+msgid "Испытательная нагрузка Z"
+msgstr ""
+
+#: ops/models.py:170
+msgid "Перемещение +X"
+msgstr ""
+
+#: ops/models.py:171
+msgid "Перемещение +Y"
+msgstr ""
+
+#: ops/models.py:172
+msgid "Перемещение +Z"
+msgstr ""
+
+#: ops/models.py:174
+msgid "Перемещение -X"
+msgstr ""
+
+#: ops/models.py:175
+msgid "Перемещение -Y"
+msgstr ""
+
+#: ops/models.py:176
+msgid "Перемещение -Z"
+msgstr ""
+
+#: ops/models.py:179
+msgid "Расчетное состояние"
+msgstr ""
+
+#: ops/models.py:182
+msgid "Расстояние между опорами"
+msgstr ""
+
+#: ops/models.py:183
+msgid "Высота цепи"
+msgstr ""
+
+#: ops/models.py:186
+msgid "Минимальный запас хода пружины"
+msgstr ""
+
+#: ops/models.py:189 ops/templates/ops/index.html:110
+msgid "Расположение трубы"
+msgstr ""
+
+#: ops/models.py:190 ops/templates/ops/index.html:152
+msgid "Направление трубы"
+msgstr ""
+
+#: ops/models.py:191
+msgid "Температура среды"
+msgstr ""
+
+#: ops/models.py:194
+msgid "DN"
+msgstr ""
+
+#: ops/models.py:196
+msgid "Нестандартный диаметр"
+msgstr ""
+
+#: ops/models.py:197
+msgid "Толщина изоляции"
+msgstr ""
+
+#: ops/models.py:199
+msgid "Материал хомута"
+msgstr ""
+
+#: ops/models.py:201
+msgid "Вкладыш"
+msgstr ""
+
+#: ops/models.py:204
+msgid "Крепление к трубе"
+msgstr ""
+
+#: ops/models.py:208
+msgid "Верхнee крепление"
+msgstr ""
+
+#: ops/models.py:210 ops/models.py:623
+msgid "Комментарий"
+msgstr ""
+
+#: ops/models.py:215 ops/models.py:216
+msgid "табличная часть проекта"
+msgstr ""
+
+#: ops/models.py:243
+msgid "Элемент табличной части"
+msgstr ""
+
+#: ops/models.py:246
+msgid "Ревизионный объект"
+msgstr ""
+
+#: ops/models.py:254
+msgid "ревизия объекта"
+msgstr ""
+
+#: ops/models.py:255
+msgid "ревизии объектов"
+msgstr ""
+
+#: ops/models.py:271
+msgid "Деталь"
+msgstr ""
+
+#: ops/models.py:272
+msgid "Сборочная единица"
+msgstr ""
+
+#: ops/models.py:273 ops/templates/ops/index.html:75
+msgid "Изделие"
+msgstr ""
+
+#: ops/models.py:274
+msgid "Заготовка"
+msgstr ""
+
+#: ops/models.py:279
+msgid "Полухомут"
+msgstr ""
+
+#: ops/models.py:280
+msgid "Основание"
+msgstr ""
+
+#: ops/models.py:281
+msgid "Прокладка"
+msgstr ""
+
+#: ops/models.py:282
+msgid "Ребро"
+msgstr ""
+
+#: ops/models.py:283
+msgid "Плита"
+msgstr ""
+
+#: ops/models.py:284
+msgid "Лапка"
+msgstr ""
+
+#: ops/models.py:285
+msgid "Ребро фронтальное"
+msgstr ""
+
+#: ops/models.py:286
+msgid "Пластина"
+msgstr ""
+
+#: ops/models.py:287
+msgid "U-болт"
+msgstr ""
+
+#: ops/models.py:288
+msgid "Упор"
+msgstr ""
+
+#: ops/models.py:289
+msgid "Ребро боковое"
+msgstr ""
+
+#: ops/models.py:290
+msgid "Ложемент"
+msgstr ""
+
+#: ops/models.py:291
+msgid "Стенка"
+msgstr ""
+
+#: ops/models.py:292
+msgid "Кольцо"
+msgstr ""
+
+#: ops/models.py:293
+msgid "Кольцо направляющее"
+msgstr ""
+
+#: ops/models.py:294
+msgid "Труба опорная"
+msgstr ""
+
+#: ops/models.py:295
+msgid "Втулка"
+msgstr ""
+
+#: ops/models.py:296
+msgid "Патрубок"
+msgstr ""
+
+#: ops/models.py:297
+msgid "Фланец"
+msgstr ""
+
+#: ops/models.py:298
+msgid "Пружина"
+msgstr ""
+
+#: ops/models.py:299
+msgid "Шпилька"
+msgstr ""
+
+#: ops/models.py:300
+msgid "Траверса"
+msgstr ""
+
+#: ops/models.py:301 ops/templates/ops/index.html:102
+msgid "Хомут"
+msgstr ""
+
+#: ops/models.py:302
+msgid "Пружинный блок"
+msgstr ""
+
+#: ops/models.py:305
+msgid "Жесткий подвес"
+msgstr ""
+
+#: ops/models.py:306
+msgid "Подвес переменного усилия"
+msgstr ""
+
+#: ops/models.py:307
+msgid "Подвес постоянного усилия"
+msgstr ""
+
+#: ops/models.py:308
+msgid "Опора переменного усилия"
+msgstr ""
+
+#: ops/models.py:309
+msgid "Опора постоянного усилия"
+msgstr ""
+
+#: ops/models.py:311
+msgid "--------"
+msgstr ""
+
+#: ops/models.py:314
+msgid "Одинарный"
+msgstr ""
+
+#: ops/models.py:315
+msgid "Двойной"
+msgstr ""
+
+#: ops/models.py:317
+msgid "---------"
+msgstr ""
+
+#: ops/models.py:322
+msgid "Полное наименование"
+msgstr ""
+
+#: ops/models.py:323
+msgid "Обозначение"
+msgstr ""
+
+#: ops/models.py:324
+msgid "Категория"
+msgstr ""
+
+#: ops/models.py:327
+msgid "Вид"
+msgstr ""
+
+#: ops/models.py:332
+msgid "тип детали/изделия"
+msgstr ""
+
+#: ops/models.py:333
+msgid "типы деталей/изделии"
+msgstr ""
+
+#: ops/models.py:342
+msgid "Для изделия выберите из (одинарный/двойной) для поля \"Вид?\""
+msgstr ""
+
+#: ops/models.py:359
+msgid "Тип детали/изделий"
+msgstr ""
+
+#: ops/models.py:364
+msgid "Эскиз"
+msgstr ""
+
+#: ops/models.py:369
+msgid "исполнение"
+msgstr ""
+
+#: ops/models.py:370
+msgid "исполнения"
+msgstr ""
+
+#: ops/models.py:390
+msgid "Иконка"
+msgstr ""
+
+#: ops/models.py:391
+msgid "Наименование группы"
+msgstr ""
+
+#: ops/models.py:392
+msgid "Заголовок группы"
+msgstr ""
+
+#: ops/models.py:397
+msgid "группа атрибутов"
+msgstr ""
+
+#: ops/models.py:398
+msgid "группы атрибутов"
+msgstr ""
+
+#: ops/models.py:427
+msgid "Строка"
+msgstr ""
+
+#: ops/models.py:428
+msgid "Целое число"
+msgstr ""
+
+#: ops/models.py:429
+msgid "Число"
+msgstr ""
+
+#: ops/models.py:430
+msgid "Да/Нет"
+msgstr ""
+
+#: ops/models.py:431
+msgid "Дата/Время"
+msgstr ""
+
+#: ops/models.py:432
+msgid "Дата"
+msgstr ""
+
+#: ops/models.py:433 ops/models.py:465
+msgid "Справочник"
+msgstr ""
+
+#: ops/models.py:444
+msgid "Диаметр трубы"
+msgstr ""
+
+#: ops/models.py:445 ops/models.py:627
+msgid "Нагрузочная группа"
+msgstr ""
+
+#: ops/models.py:446 ops/models.py:631 ops/models.py:782 ops/models.py:815
+msgid "Материал"
+msgstr ""
+
+#: ops/models.py:447
+msgid "Тип покрытия"
+msgstr ""
+
+#: ops/models.py:462
+msgid "Тип поля"
+msgstr ""
+
+#: ops/models.py:469
+msgid "Наименование поля"
+msgstr ""
+
+#: ops/models.py:470
+msgid "Должен содержать только английские буквы, цифры и _"
+msgstr ""
+
+#: ops/models.py:472
+msgid "Наименование поля в ERP"
+msgstr ""
+
+#: ops/models.py:474
+msgid "Заголовок поля"
+msgstr ""
+
+#: ops/models.py:475
+msgid "Описание поля"
+msgstr ""
+
+#: ops/models.py:476
+msgid "Обязательное поле"
+msgstr ""
+
+#: ops/models.py:477
+msgid "Значение по-умолчанию"
+msgstr ""
+
+#: ops/models.py:480
+msgid "Вычисляемое значение"
+msgstr ""
+
+#: ops/models.py:481
+msgid ""
+"Если формула вычисления здесь указан, то поле является вычисляемым, и его "
+"нельзя будет редактировать вручную"
+msgstr ""
+
+#: ops/models.py:502
+msgid "атрибут"
+msgstr ""
+
+#: ops/models.py:503
+msgid "атрибуты"
+msgstr ""
+
+#: ops/models.py:566
+msgid "Запрещено указывать список, если поле является вычисляемым"
+msgstr ""
+
+#: ops/models.py:571
+msgid ""
+"Запрещено указывать значение по-умолчанию, если поле является вычисляемым"
+msgstr ""
+
+#: ops/models.py:576
+msgid "Запрещено указывать обязательность поля, если поле является вычисляемым"
+msgstr ""
+
+#: ops/models.py:580
+msgid "Необходимо выбрать каталог, если тип \"Каталог\""
+msgstr ""
+
+#: ops/models.py:609 ops/templates/ops/index.html:253
+#: ops/templates/ops/spring_choice.html:85
+msgid "Тип"
+msgstr ""
+
+#: ops/models.py:614
+msgid "Внутренний идентификатор"
+msgstr ""
+
+#: ops/models.py:621
+msgid "Маркировка"
+msgstr ""
+
+#: ops/models.py:629
+msgid "Масса, кг"
+msgstr ""
+
+#: ops/models.py:634
+msgid "Автор"
+msgstr ""
+
+#: ops/models.py:636
+msgid "Идентификатор с ERP"
+msgstr ""
+
+#: ops/models.py:643
+msgid "Изделие/Деталь/Сборочная единица"
+msgstr ""
+
+#: ops/models.py:644
+msgid "Изделия/Детали/Сборочные единицы"
+msgstr ""
+
+#: ops/models.py:646
+msgid "Может создавать свои изделия/детали/сборочные единицы"
+msgstr ""
+
+#: ops/models.py:647
+msgid "Может изменить свои изделия/детали/сборочные единицы"
+msgstr ""
+
+#: ops/models.py:648
+msgid "Может удалить свои изделия/детали/сборочные единицы"
+msgstr ""
+
+#: ops/models.py:649
+msgid "Может видеть свои изделия/детали/сборочные единицы"
+msgstr ""
+
+#: ops/models.py:650
+msgid "Может синхронизировать изделия/детали/сборочные единицы в ERP"
+msgstr ""
+
+#: ops/models.py:672
+msgid "Исполнение не принадлежит этому типу"
+msgstr ""
+
+#: ops/models.py:687
+#, python-brace-format
+msgid "Параметр {attribute.name} является обязательным"
+msgstr ""
+
+#: ops/models.py:696
+#, python-brace-format
+msgid "Значение {our_value} отсутствует в списке значении"
+msgstr ""
+
+#: ops/models.py:748
+msgid "Родитель"
+msgstr ""
+
+#: ops/models.py:750
+msgid "Дочерний элемент"
+msgstr ""
+
+#: ops/models.py:752 ops/models.py:781 ops/models.py:814
+msgid "Позиция"
+msgstr ""
+
+#: ops/models.py:759 ops/models.py:760
+msgid "спецификация"
+msgstr ""
+
+#: ops/models.py:763
+msgid "Может создавать свою спецификацию"
+msgstr ""
+
+#: ops/models.py:764
+msgid "Может изменить свою спецификацию"
+msgstr ""
+
+#: ops/models.py:765
+msgid "Может удалить свою спецификацию"
+msgstr ""
+
+#: ops/models.py:766
+msgid "Может видеть свою спецификацию"
+msgstr ""
+
+#: ops/models.py:774 ops/models.py:806
+msgid "Сборка"
+msgstr ""
+
+#: ops/models.py:778 ops/models.py:810
+msgid "Комплектующий узел или деталь"
+msgstr ""
+
+#: ops/models.py:788
+msgid "Комплектующая базового состава"
+msgstr ""
+
+#: ops/models.py:789
+msgid "Комплектующие базового состава"
+msgstr ""
+
+#: ops/models.py:823 ops/models.py:824
+msgid "Временный состав изделия"
+msgstr ""
+
+#: ops/templates/ops/index.html:12
+msgid "Ввод значений нагрузок и перемещений"
+msgstr ""
+
+#: ops/templates/ops/index.html:14
+msgid "Произошла ошибка при вычислении"
+msgstr ""
+
+#: ops/templates/ops/index.html:17
+msgid "Нагрузка"
+msgstr ""
+
+#: ops/templates/ops/index.html:29 ops/templates/ops/index.html:41
+msgid "Перемещение"
+msgstr ""
+
+#: ops/templates/ops/index.html:54
+msgid "Серия"
+msgstr ""
+
+#: ops/templates/ops/index.html:72
+msgid "Выбор узла и расположение трубы"
+msgstr ""
+
+#: ops/templates/ops/index.html:78
+msgid "Комплект с пружинной подвеской/опорой"
+msgstr ""
+
+#: ops/templates/ops/index.html:82
+msgid "Жесткая подвеска"
+msgstr ""
+
+#: ops/templates/ops/index.html:86
+msgid "Опора шарнирная"
+msgstr ""
+
+#: ops/templates/ops/index.html:90
+msgid "Стойки шарнира"
+msgstr ""
+
+#: ops/templates/ops/index.html:94
+msgid "Амортизатор"
+msgstr ""
+
+#: ops/templates/ops/index.html:98
+msgid "Блок подвески/опоры"
+msgstr ""
+
+#: ops/templates/ops/index.html:106
+msgid "Комплектующие"
+msgstr ""
+
+#: ops/templates/ops/index.html:113
+msgid "горизонтальное"
+msgstr ""
+
+#: ops/templates/ops/index.html:117
+msgid "вертикальное"
+msgstr ""
+
+#: ops/templates/ops/index.html:121
+msgid "без трубного хомута"
+msgstr ""
+
+#: ops/templates/ops/index.html:125
+msgid "Направление нагрузки"
+msgstr ""
+
+#: ops/templates/ops/index.html:128
+msgid "Подвеска"
+msgstr ""
+
+#: ops/templates/ops/index.html:132
+msgid "Опора"
+msgstr ""
+
+#: ops/templates/ops/index.html:136
+msgid "Двойная подвеска"
+msgstr ""
+
+#: ops/templates/ops/index.html:140
+msgid "Двойная опора"
+msgstr ""
+
+#: ops/templates/ops/index.html:144
+msgid "Разветвленная подвеска"
+msgstr ""
+
+#: ops/templates/ops/index.html:148
+msgid "Особый случай"
+msgstr ""
+
+#: ops/templates/ops/index.html:155
+msgid "X"
+msgstr ""
+
+#: ops/templates/ops/index.html:159
+msgid "Y"
+msgstr ""
+
+#: ops/templates/ops/index.html:163
+msgid "Z"
+msgstr ""
+
+#: ops/templates/ops/index.html:174 ops/templates/ops/spring_choice.html:6
+msgid "Выбор пружины по жесткости и величине хода"
+msgstr ""
+
+#: ops/templates/ops/index.html:176 ops/templates/ops/spring_choice.html:8
+msgid "FH/FS"
+msgstr ""
+
+#: ops/templates/ops/index.html:180
+msgid "Величина нагрузки"
+msgstr ""
+
+#: ops/templates/ops/index.html:184 ops/templates/ops/spring_choice.html:16
+msgid "Горяч. нагр."
+msgstr ""
+
+#: ops/templates/ops/index.html:191 ops/templates/ops/spring_choice.html:23
+msgid "Холод. нагр."
+msgstr ""
+
+#: ops/templates/ops/index.html:198 ops/templates/ops/spring_choice.html:30
+msgid "Жестк. пруж."
+msgstr ""
+
+#: ops/templates/ops/index.html:205 ops/templates/ops/spring_choice.html:37
+msgid "Вес грузовой цепи"
+msgstr ""
+
+#: ops/templates/ops/index.html:214 ops/templates/ops/spring_choice.html:46
+msgid "Номинальная величина хода"
+msgstr ""
+
+#: ops/templates/ops/index.html:221 ops/templates/ops/spring_choice.html:53
+msgid "Заданный ход"
+msgstr ""
+
+#: ops/templates/ops/index.html:232 ops/templates/ops/spring_choice.html:64
+msgid "Изменение нагрузки"
+msgstr ""
+
+#: ops/templates/ops/index.html:239 ops/templates/ops/spring_choice.html:71
+msgid "Запас хода пружины"
+msgstr ""
+
+#: ops/templates/ops/index.html:260
+msgid "Миним. запас хода пружины"
+msgstr ""
+
+#: ops/templates/ops/index.html:265
+msgid "Обновить"
+msgstr ""
+
+#: ops/templates/ops/index.html:274 ops/templates/ops/spring_choice.html:92
+msgid "Альтернативный вариант пружины"
+msgstr ""
+
+#: ops/templates/ops/layouts/navbar.html:30
+msgid "Выход"
+msgstr ""
+
+#: ops/templates/ops/login.html:4 ops/templates/ops/login.html:7
+msgid "Вход в систему"
+msgstr ""
+
+#: ops/templates/ops/spring_choice.html:12
+msgid "Размер пружинного блока"
+msgstr ""
+
+#: project/settings.py:204
+msgid "Russian"
+msgstr "Русский"
+
+#: project/settings.py:205
+msgid "English"
+msgstr "Английский"
+
+#: templates/admin/ops/variant/stacked.html:34
+msgid "Change"
+msgstr "Изменить"
+
+#: templates/admin/ops/variant/stacked.html:34
+msgid "View"
+msgstr "Посмотреть"
+
+#: templates/admin/ops/variant/stacked.html:36
+msgid "View on site"
+msgstr "Посмотреть на сайте"
+
+#: templates/admin/ops/variant/stacked.html:113
+#, python-format
+msgid "Add another %(verbose_name)s"
+msgstr "Добавить еще %(verbose_name)s"
+
+#: templates/admin/simpletext_list_filter.html:2
+#, python-format
+msgid " By %(filter_title)s "
+msgstr "%(filter_title)s "

@@ -1,0 +1,19 @@
+[Unit]
+Description=ops daphne asgi server
+After=network.target redis.service
+
+[Service]
+Type=simple
+User=ops
+Group=ops
+EnvironmentFile=/etc/conf.d/ops.conf
+RuntimeDirectory=ops
+#WorkingDirectory=${OPS_ROOT}/app
+ExecStart=/bin/sh -c 'PYTHONPATH=${OPS_ROOT}/app:${PYTHONPATH} ${OPS_ROOT}/env/bin/python ${OPS_ROOT}/env/bin/daphne -u ${DAPHNE_SOCK_FILE} --access-log ${DAPHNE_ACCESS_LOG_FILE} project.asgi:application'
+ExecStop=/bin/systemctl kill ops-daphne.service
+
+RuntimeDirectory=ops
+RuntimeDirectoryMode=0775
+
+[Install]
+WantedBy=multi-user.target

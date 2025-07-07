@@ -1,0 +1,10 @@
+/var/log/ops/app-*.log
+{
+  weekly
+  missingok
+  notifempty
+  rotate 99
+  compress
+  delaycompress
+  minsize 10M
+}

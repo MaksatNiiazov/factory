@@ -1,0 +1,37 @@
+{% extends 'ops/base.html' %}
+{% load static i18n django_bootstrap5 %}
+
+{% block title %}Список проектов{% endblock %}
+
+{% block content %}
+
+<div class="row g-3">
+    <div class="col-md-6">
+        <h1>Проекты</h1>
+    </div>
+    <div class="col-md-6">
+        {% bootstrap_button "Добавить проект" button_type="link" button_class="btn-primary" size='sm' href='project_page/new' %}
+    </div>
+</div>
+<table class="table table-hover">
+    <thead>
+    <tr>
+        <th class="width9">Номер</th>
+        <th class="width30">Контрагент</th>
+        <th class="width30">Статус</th>
+    </tr>
+    </thead>
+    <tbody>
+        {% for project in object_list %}
+        <tr>
+            <td><a href="{% url 'project_page' project.pk %}">{{ project.number }}</a></td>
+            <td>{{ project.contragent|default_if_none:'-' }}</td>
+            <td>{{ project.get_status_display|default_if_none:'-' }}</td>
+        </tr>
+        {% empty %}
+            No projects yet.
+        {% endfor %}
+    </tbody>
+</table>
+
+{% endblock %}

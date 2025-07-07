@@ -1,0 +1,34 @@
+[Unit]
+Description=ops celery worker service
+After=network.target redis.service
+
+[Service]
+Type=forking
+User=ops
+Group=ops
+EnvironmentFile=/etc/conf.d/ops.conf
+RuntimeDirectory=ops
+#WorkingDirectory=/opt/celery
+
+ExecStart=/bin/sh -c '${CELERY_BIN} -A ${CELERY_APP} multi start ${CELERYD_NODES} \
+  --pidfile=${CELERYD_PID_FILE} --logfile=${CELERYD_LOG_FILE} \
+  --loglevel="${CELERYD_LOG_LEVEL}" ${CELERYD_OPTS}'
+
+ExecStop=/bin/sh -c '${CELERY_BIN} multi stopwait ${CELERYD_NODES} \
+  --pidfile=${CELERYD_PID_FILE} --logfile=${CELERYD_LOG_FILE} \
+  --loglevel="${CELERYD_LOG_LEVEL}"'
+
+ExecReload=/bin/sh -c '${CELERY_BIN} -A ${CELERY_APP} multi restart ${CELERYD_NODES} \
+  --pidfile=${CELERYD_PID_FILE} --logfile=${CELERYD_LOG_FILE} \
+  --loglevel="${CELERYD_LOG_LEVEL}" ${CELERYD_OPTS}'
+
+Restart=always
+
+#PermissionsStartOnly=True
+RuntimeDirectory=ops
+RuntimeDirectoryMode=0775
+#LogsDirectory=ops
+#LogsDirectoryMode=0775
+
+[Install]
+WantedBy=multi-user.target

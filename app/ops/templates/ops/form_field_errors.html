@@ -1,0 +1,11 @@
+{% if errors %}
+<div class="alert alert-danger"><b>Невозможно сохранить из-за ошибок:</b>
+    {% for field, errors in form.errors.items %}
+        <ul>
+        {% for error in errors %}
+            <li>{{ error|escape }}</li>
+        {% endfor %}
+        </ul>
+    {% endfor %}
+</div>
+{% endif %}

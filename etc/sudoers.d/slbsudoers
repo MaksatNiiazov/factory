@@ -1,0 +1,15 @@
+ops ALL = (root) NOPASSWD:SETENV: /home/ops/witzenmann-ops/etc/restart.sh
+ops ALL = (root) NOPASSWD:SETENV: /home/ops/witzenmann-ops/etc/stop.sh
+ops ALL = (root) NOPASSWD:SETENV: /home/ops/witzenmann-ops/etc/publish.sh
+ops ALL = NOPASSWD: /bin/systemctl start ops-gunicorn.service
+ops ALL = NOPASSWD: /bin/systemctl stop ops-gunicorn.service
+ops ALL = NOPASSWD: /bin/systemctl restart ops-gunicorn.service
+ops ALL = NOPASSWD: /bin/systemctl start ops-celery-beat.service
+ops ALL = NOPASSWD: /bin/systemctl stop ops-celery-beat.service
+ops ALL = NOPASSWD: /bin/systemctl restart ops-celery-beat.service
+ops ALL = NOPASSWD: /bin/systemctl start ops-celery-worker.service
+ops ALL = NOPASSWD: /bin/systemctl stop ops-celery-worker.service
+ops ALL = NOPASSWD: /bin/systemctl restart ops-celery-worker.service
+ops ALL = NOPASSWD: /bin/systemctl start ops-daphne.service
+ops ALL = NOPASSWD: /bin/systemctl stop ops-daphne.service
+ops ALL = NOPASSWD: /bin/systemctl restart ops-daphne.service

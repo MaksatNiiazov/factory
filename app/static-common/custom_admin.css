@@ -1,0 +1,15 @@
+@media (min-width: 1025px) {
+  .change-form .stacked {
+    width: 790px;
+  }
+
+  .change-form .stacked .selector-available,
+  .change-form .stacked .selector-chosen,
+  .change-form .stacked select {
+    width: 780px;
+  }
+
+  .change-form .stacked .selector-available input {
+    width: 722px;
+  }
+}
