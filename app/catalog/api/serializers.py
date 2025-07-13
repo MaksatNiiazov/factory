@@ -30,6 +30,7 @@ from catalog.models import (
     ComponentGroup,
     SpringBlockFamilyBinding,
     SSBCatalog,
+    SSGCatalog,
     ClampMaterialCoefficient,
 )
 
@@ -254,6 +255,24 @@ class SSBCatalogSerializer(CatalogueBaseSerializer):
             "b",
             "h",
             "diameter_j",
+        ]
+
+
+class SSGCatalogSerializer(CatalogueBaseSerializer):
+    class Meta:
+        model = SSGCatalog
+        fields = [
+            'id',
+            'fn',
+            'l_min',
+            'l_max',
+            'l1',
+            'd',
+            'd1',
+            'r',
+            's',
+            'sw',
+            'regulation',
         ]
 
 

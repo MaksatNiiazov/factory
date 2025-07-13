@@ -1,5 +1,5 @@
 from copy import copy
-from typing import Optional, List
+from typing import Optional, List, Dict, Any, Tuple
 
 from django.db.models import Q, OuterRef, Exists, Count
 
@@ -143,7 +143,10 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
     def get_temperature(self):
         return self.params['pipe_params']['temperature']
 
-    def get_pipe_diameter_size(self):
+    def get_pipe_diameter_size(self) -> Optional[float]:
+        """
+        Возвращает диаметр трубы в миллиметрах.
+        """
         manual_size = self.params['pipe_params']['pipe_diameter_size_manual']
 
         if manual_size is not None:
@@ -151,17 +154,25 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
         pipe_diameter_id = self.params['pipe_params']['pipe_diameter']
 
-        if pipe_diameter_id is not None:
-            pipe_diameter = PipeDiameter.objects.get(id=pipe_diameter_id)
-            return pipe_diameter.size
+        if pipe_diameter_id is None:
+            return None
 
-        return None
+        pipe_diameter = PipeDiameter.objects.filter(id=pipe_diameter_id).first()
+
+        if not pipe_diameter:
+            self.debug.append(f'Не найден диаметр трубы с id={pipe_diameter_id}. Возможно он был удален.')
+            return None
+
+        return pipe_diameter.size
 
     def get_available_pipe_diameters(self):
         pipe_diameters = PipeDiameter.objects.all()
         return pipe_diameters
 
-    def get_support_distance(self):
+    def get_support_distance(self) -> Optional[float]:
+        """
+        Возвращает расстояние между опорами трубы в миллиметрах.
+        """
         support_distance_manual = self.params['pipe_params']['support_distance_manual']
 
         if support_distance_manual is not None:
@@ -169,17 +180,25 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
         support_distance_id = self.params['pipe_params']['support_distance']
 
-        if support_distance_id is not None:
-            support_distance = SupportDistance.objects.get(id=support_distance_id)
-            return support_distance.value
+        if support_distance_id is None:
+            return None
 
-        return None
+        support_distance = SupportDistance.objects.filter(id=support_distance_id).first()
+
+        if not support_distance:
+            self.debug.append(f'Не найдено расстояние между опорами трубы с id={support_distance_id}. Возможно оно было удалено.')
+            return None
+
+        return support_distance.value
 
     def get_available_support_distances(self):
         support_distances = SupportDistance.objects.all()
         return support_distances
 
     def get_available_mounting_groups_a(self):
+        """
+        Получает доступные группы креплений A на основе параметров.
+        """
         if not self.params['product_family']:
             self.debug.append('#Тип крепления A: Не выбран семейство изделии')
             return PipeMountingGroup.objects.none()
@@ -215,6 +234,9 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
         return pipe_mounting_groups
 
     def get_available_mounting_groups_b(self):
+        """
+        Получает доступные группы креплений B на основе параметров.
+        """
         if not self.params['product_family']:
             self.debug.append('#Тип крепления B: Не выбран семейство изделии')
             return PipeMountingGroup.objects.none()
@@ -803,12 +825,29 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
             'extender': max(0, l_block - (entry.l2_min if type_ == 2 else (entry.l3_min + entry.l4))),
             'mounting_length': mounting_length,
             'l_req': l_block,
+            'l1': entry.l1,
             'l2_min': entry.l2_min,
             'l2_max': entry.l2_max,
             'l3_min': entry.l3_min,
             'l3_max': entry.l3_max,
             'l4': entry.l4,
         }
+    
+    def get_parameters(self, available_options: Optional[Dict[str, Any]] = None) -> Tuple[Dict[str, Any], List[str]]:
+        """
+        Возвращает параметры, необходимые для создания изделия гидроамортизатора.
+        """
+        parameters = {}
+
+        if not available_options:
+            available_options = self.get_available_options()
+
+        l1 = available_options.get('shock_result', {}).get('l1', None)
+
+        if l1 is not None:
+            parameters['L1'] = l1
+        
+        return parameters, []
 
     def get_available_options(self):
         available_load_types = self.get_available_load_types()

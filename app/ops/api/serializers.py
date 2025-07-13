@@ -279,14 +279,15 @@ class ItemSerializer(CleanSerializerMixin, FlexFieldsModelSerializer):
         model = Item
         fields = (
             'id', 'type', 'variant', 'inner_id', 'name', 'marking', 'marking_errors', 'comment',
-            'weight', 'weight_errors', 'height', 'height_errors', 'parameters', 'parameters_errors', 'material',
-            'author', 'erp_id', 'created', 'modified',
+            'weight', 'weight_errors', 'height', 'height_errors', 'parameters', 'parameters_errors', 'locked_parameters',
+            'material', 'author', 'erp_id', 'created', 'modified',
         )
         extra_kwargs = {
             'inner_id': {'read_only': True},
             'marking': {'read_only': True},
             'marking_errors': {'read_only': True},
             'parameters_errors': {'read_only': True},
+            'locked_parameters': {'read_only': True},
             'erp_id': {'read_only': True},
             'weight_errors': {'read_only': True},
             'height_errors': {'read_only': True},

@@ -22,10 +22,7 @@ from django.core.files.base import ContentFile
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 
 from django.db import models
-from django.db.models import QuerySet, Q, Model
-from django.db.models.signals import post_save, post_delete
-
-from django.dispatch import receiver
+from django.db.models import QuerySet, Q
 
 from django.utils.module_loading import import_string
 from django.utils.translation import get_language
@@ -35,6 +32,7 @@ from django_extensions.db.models import TimeStampedModel
 from pybarker.contrib.modelshistory.models import HistoryModelTracker
 from pybarker.django.db.models import ReadableJSONField
 
+from ops.cache import get_cached_attributes, get_cached_attributes_with_topological_sort, get_cached_item_children
 from ops.exceptions import TopologicalSortException
 
 from catalog.choices import Standard, SeriesNameChoices, ComponentGroupType
@@ -640,20 +638,23 @@ class Variant(SoftDeleteModelMixin, models.Model):
         """
         return BaseComposition.objects.for_variant(self)
 
-    def get_attributes(self) -> QuerySet:
+    def get_attributes(self, cached=False) -> QuerySet:
         """
         Возвращает базовые атрибуты и конкретные атрибуты этого исполнения.
 
         Если у исполнения (Variant) и типа детали (DetailType) есть атрибуты с одинаковыми наименованием,
         возвращается атрибут, связанный с исполнением. Атрибуты типа детали в таком случае исключаются.
         """
-        return Attribute.objects.for_variant(self)
+        if cached:
+            return get_cached_attributes(self)
+        else:
+            return Attribute.objects.for_variant(self)
 
-    def get_attributes_dict(self) -> dict[str, 'Attribute']:
+    def get_attributes_dict(self, cached=False) -> dict[str, 'Attribute']:
         """
         Возвращает словарь атрибутов, где ключом является имя атрибута, а значением - объект Attribute.
         """
-        return {attr.name: attr for attr in self.get_attributes()}
+        return {attr.name: attr for attr in self.get_attributes(cached=cached)}
 
     def has_series(self) -> bool:
         return ComponentGroup.objects.filter(
@@ -757,34 +758,6 @@ class Variant(SoftDeleteModelMixin, models.Model):
 
     def __str__(self):
         return f'{self.detail_type}: {self.name}'
-
-
-@receiver(post_save, sender=Variant)
-def update_marking_on_items(sender, instance, **kwargs):
-    """
-    Если сам шаблон меняет в Variant, то заново генерируем маркировку с зависящих Item'ов.
-    """
-    items = Item.objects.filter(variant=instance)
-    items.generate_marking()
-
-
-@receiver(post_save, sender=Variant)
-def update_weight_on_items(sender, instance, **kwargs):
-    items = Item.objects.filter(variant=instance)
-    items.update_weight()
-
-
-@receiver(post_save, sender=Variant)
-def update_height_on_items(sender, instance, **kwargs):
-    items = Item.objects.filter(variant=instance)
-    items.update_height()
-
-
-@receiver(post_save, sender=Variant)
-def reset_series_if_needed(sender, instance: Variant, **kwargs):
-    if not instance.has_series() and instance.series:
-        instance.series = None
-        Variant.objects.filter(pk=instance.pk).update(series=None)
 
 
 class FieldSet(SoftDeleteModelMixin, models.Model):
@@ -1092,6 +1065,7 @@ class Item(SoftDeleteModelMixin, TimeStampedModel, models.Model):
     )
     parameters = ReadableJSONField(null=True, blank=True, verbose_name=_('Параметры'))
     parameters_errors = ReadableJSONField(null=True, blank=True, verbose_name=_('Ошибки параметров'))
+    locked_parameters = ReadableJSONField(null=True, blank=True, verbose_name=_('Заблокированные параметры'))
     author = models.ForeignKey(User, on_delete=models.PROTECT, related_name='items', verbose_name=_('Автор'))
 
     erp_id = models.CharField(null=True, blank=True, verbose_name=_('Идентификатор с ERP'))
@@ -1226,11 +1200,21 @@ class Item(SoftDeleteModelMixin, TimeStampedModel, models.Model):
         """
         return self.marking
 
+    def get_children(self):
+        children = get_cached_item_children(self.id)
+        return children
+
     def calculate_attribute(self, attribute, extra_context=None, children=None):
         errors = {}
         value = None
-        extra_context = extra_context or {}
+
         our_value = self.parameters.get(attribute.name)
+        extra_context = extra_context or {}
+
+        # Если значение атрибута заблокировано, то пропускаем вычисление
+        locked = self.locked_parameters
+        if locked and attribute.name in locked:
+            return our_value, errors
 
         is_calculable = bool(attribute.calculated_value)
 
@@ -1304,38 +1288,41 @@ class Item(SoftDeleteModelMixin, TimeStampedModel, models.Model):
 
         return value, errors
 
-    def clean(self):
-        from ops.utils import topological_sort
-
-        if self.variant_id and self.type_id != self.variant.detail_type_id:
-            raise ValidationError({'variant': _('Исполнение не принадлежит этому типу')})
-
-        errors = {}
+    def recalculate_parameters(self) -> None:
+        """
+        Пересчитывает значение атрибутов изделия/детали.
+        """
+        if not self.variant_id:
+            return
 
         if not self.parameters:
             self.parameters = {}
+        if not self.parameters_errors:
+            self.parameters_errors = {}
 
-        if self.variant_id:
-            attributes = self.variant.get_attributes()
+        try:
+            attributes = get_cached_attributes_with_topological_sort(self.variant)
+        except TopologicalSortException as exc:
+            logger.exception("Topological sort failed for attributes in Item.id=%d", self.id)
 
-            try:
-                attributes = topological_sort(attributes)
-            except TopologicalSortException as exc:
-                logger.exception('Topological sort failed for attributes in Item.id=%d', self.id)
-
-                for field in exc.fields:
-                    errors[field] = str(exc)
-                    self.parameters[field] = None
-            else:
-                for attribute in attributes:
-                    value, attribute_errors = self.calculate_attribute(attribute)
-                    self.parameters[attribute.name] = value
-                    errors.update(**attribute_errors)
-
-        if errors:
-            self.parameters_errors = errors
+            for field in exc.fields:
+                self.parameters[field] = None
+                self.parameters_errors[field] = str(exc)
         else:
-            self.parameters_errors = None
+            for attribute in attributes:
+                value, errors = self.calculate_attribute(attribute)
+                self.parameters[attribute.name] = value
+                self.parameters_errors.update(**errors)
+
+    def clean(self):
+        if self.variant_id and self.type_id != self.variant.detail_type_id:
+            raise ValidationError({'variant': _('Исполнение не принадлежит этому типу')})
+        
+        self.recalculate_parameters()
+        self.marking, self.marking_errors = self.generate_marking()
+
+        if not self.name_manual_changed:
+            self.name = self.generate_name()
 
     def _set_default_comment(self):
         self.comment = self.type.default_comment if self.type else ''
@@ -1363,33 +1350,6 @@ class Item(SoftDeleteModelMixin, TimeStampedModel, models.Model):
                 self.inner_id = 100000
             if not self.comment:
                 self._set_default_comment()
-
-        # После каждого сохранения, повторно сгенерируем маркировку, вес и высоту
-        self.marking, self.marking_errors = self.generate_marking()
-        self.update_weight(commit=False)
-        self.update_height(commit=False)
-
-        self.update_chain_weight(commit=False)
-        self.update_spring_block_length(commit=False)
-
-        if not self._state.adding:
-            parents = ItemChild.objects.filter(child=self)
-
-            for parent in parents:
-                parent.marking, parent.marking_errors = parent.parent.generate_marking()
-                parent.parent.update_weight(commit=False)
-                parent.parent.update_height(commit=False)
-                parent.parent.update_chain_weight(commit=False)
-                parent.parent.update_spring_block_length(commit=False)
-                parent.parent.save(update_fields=[
-                    'marking', 'marking_errors', 'weight', 'weight_errors',
-                    'height', 'height_errors',
-                    'chain_weight', 'chain_weight_errors',
-                    'spring_block_length', 'spring_block_length_errors'
-                ])
-
-        if not self.name and not self.name_manual_changed:
-            self.name = self.generate_name()
 
         try:
             super().save(*args, **kwargs)
@@ -1530,58 +1490,6 @@ class ItemChild(SoftDeleteModelMixin, models.Model):
 
     def __str__(self):
         return f'{self.parent}: #{self.position} {self.child} (Кол.: {self.count})'
-
-
-@receiver(post_save, sender=Attribute)
-def trigger_item_parameter_recalculation(sender: Type[Model], instance: Attribute, **kwargs) -> None:
-    """
-    Сигнал, вызываемый после сохранения атрибута.
-
-    Если атрибут связан с detail_type или variant, находит все связанные Items и инициирует
-    асинхронную задачу на перерасчёт их параметров.
-    """
-    from ops.tasks import recalculate_item_parameters
-
-    if instance.detail_type:
-        items = Item.objects.filter(type=instance.detail_type)
-    if instance.variant:
-        items = Item.objects.filter(variant=instance.variant)
-
-    item_ids = list(items.values_list('id', flat=True))
-    recalculate_item_parameters.delay(item_ids)
-
-
-@receiver(post_save, sender=ItemChild)
-def update_parent_marking(sender, instance, **kwargs):
-    """
-    Обновляет маркировку (marking) и ошибки маркировки (marking_errors) у родительского элемента,
-    если был изменен дочерний элемент.
-
-    Функция вызывается при сохранении объект `ItemChild`. Она генерирует новую маркировку
-    для родителя и обновляет соответствующие поля.
-    """
-    # TODO: А родитель родителя? Им же тоже нужно сгенерировать маркировку.
-    parent = instance.parent
-
-    if parent:
-        parent.clean()  # Для компилирования атрибутов
-        parent.marking, parent.marking_errors = parent.generate_marking()
-        parent.save()
-
-
-@receiver(post_delete, sender=ItemChild)
-def update_parent_marking_on_delete(sender, instance, **kwargs):
-    """
-    Обновляет маркировку (marking) и ошибки маркировки (marking_errors) у родительского элемента,
-    если удален дочерний элемент.
-    """
-    # TODO: А родитель родителя? Им же тоже нужно сгенерировать маркировку.
-    parent = instance.parent
-
-    if parent:
-        parent.clean()  # Для компилирования атрибутов
-        parent.marking, parent.marking_errors = parent.generate_marking()
-        parent.save()
 
 
 class BaseComposition(SoftDeleteModelMixin, models.Model):

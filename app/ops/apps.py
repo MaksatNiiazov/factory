@@ -6,6 +6,8 @@ class OpsConfig(AppConfig):
     name = 'ops'
 
     def ready(self):
+        import ops.signals # noqa: F401
+
         from auditlog.registry import auditlog
         # Core models
         app_models = apps.get_app_config(self.label).get_models()

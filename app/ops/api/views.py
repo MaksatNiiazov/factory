@@ -262,7 +262,7 @@ class ProjectItemViewSet(CustomModelViewSet):
     permission_classes = [ProjectItemPermission]
 
     def get_serializer_class(self):
-        if self.action in ['get_sketch', 'get_subsketch', 'set_selection', 'calculate']:
+        if self.action in ['get_sketch', 'get_subsketch', 'set_selection', 'calculate', 'update_item']:
             return Serializer
 
         return ProjectItemSerializer
@@ -287,7 +287,7 @@ class ProjectItemViewSet(CustomModelViewSet):
 
         if selection_type not in ['product_selection', 'shock_selection']:
             return Response({
-                'detail': f'Некорретный selection_type: {selection_type}'
+                'detail': f'Некорректный selection_type: {selection_type}'
             }, status=400)
 
         if project_item.selection_params:
@@ -345,6 +345,41 @@ class ProjectItemViewSet(CustomModelViewSet):
             available_options = ShockSelectionAvailableOptions(project_item).get_available_options()
 
         return Response(available_options)
+
+    @action(methods=['POST'], detail=True)
+    def update_item(self, request: Request, project_pk: int, pk: int) -> Response:
+        """
+        Создает или обновляет Item (изделие) для табличной части проекта.
+        """
+        selection_type = request.query_params.get('selection_type', 'product_selection')
+
+        if selection_type not in ['product_selection', 'shock_selection']:
+            return Response({
+                'detail': f'Некорретный selection_type: {selection_type}'
+            }, status=400)
+        
+        project_item = ProjectItem.objects.get(project_id=project_pk, pk=pk)
+
+        if selection_type == 'product_selection':
+            selection = ProductSelectionAvailableOptions(project_item)
+        else:
+            selection = ShockSelectionAvailableOptions(project_item)
+        
+        available_options = selection.get_available_options()
+        specifications = available_options.get('specifications', [])
+        parameters, locked_parameters = selection.get_parameters(available_options)
+
+        if project_item.original_item:
+            item = selection.update_item(request.user, project_item.original_item, parameters, locked_parameters, specifications)
+        else:
+            item = selection.create_item(request.user, parameters, locked_parameters, specifications)
+        
+        project_item.original_item = item
+        project_item.save()
+
+        serializer = ProjectItemSerializer(project_item)
+
+        return Response(serializer.data)
 
     @action(methods=['POST'], detail=True)
     def get_sketch(self, request: Request, project_pk: int, pk: int) -> FileResponse:

@@ -18,7 +18,7 @@ from catalog.api.filters import (
     NominalDiameterFilter, PipeDiameterFilter, LoadGroupFilter, MaterialFilter,
     CoveringTypeFilter, CoveringFilter, SupportDistanceFilter, ProductFamilyFilter, PipeMountingGroupFilter,
     PipeMountingRuleFilter, ComponentGroupFilter, LogEntryFilter, SpringBlockFamilyBindingFilter, SSBCatalogFilter,
-    ClampMaterialCoefficientFilter,
+    ClampMaterialCoefficientFilter, SSGCatalogFilter,
 )
 from catalog.api.serializers import (
     PipeDiameterSerializer, LoadGroupSerializer, MaterialSerializer,
@@ -26,13 +26,13 @@ from catalog.api.serializers import (
     DirectoryFieldSerializer, SupportDistanceSerializer, ProductFamilySerializer, ProductClassSerializer,
     LoadSerializer, SpringStiffnessSerializer, PipeMountingGroupSerializer, PipeMountingRuleSerializer,
     ComponentGroupSerializer, LogEntrySerializer, SpringBlockFamilyBindingSerializer, SSBCatalogSerializer,
-    ClampMaterialCoefficientSerializer,
+    ClampMaterialCoefficientSerializer, SSGCatalogSerializer,
 )
 from catalog.models import (
     PipeDiameter, LoadGroup, Material, NominalDiameter, CoveringType, Covering, Directory,
     DirectoryEntry, DirectoryEntryValue, DirectoryField, SupportDistance, ProductFamily, ProductClass, Load,
     SpringStiffness, PipeMountingGroup, PipeMountingRule, ComponentGroup, SpringBlockFamilyBinding, SSBCatalog,
-    ClampMaterialCoefficient,
+    SSGCatalog, ClampMaterialCoefficient,
 )
 from catalog.services.materials import get_materials_by_temperature_service
 from catalog.services.pipe_diameter import get_dn_by_diameter_service
@@ -550,7 +550,15 @@ class SSBCatalogViewSet(ModelViewSet):
     permission_classes = [AnyOneCanViewPermission | ActionPermission]
     filter_backends = [DjangoFilterBackend, MappedOrderingFilter]
     filterset_class = SSBCatalogFilter
+    ordering = ['id']
 
+
+class SSGCatalogViewSet(ModelViewSet):
+    queryset = SSGCatalog.objects.all()
+    serializer_class = SSGCatalogSerializer
+    permission_classes = [AnyOneCanViewPermission | ActionPermission]
+    filter_backends = [DjangoFilterBackend, MappedOrderingFilter]
+    filterset_class = SSGCatalogFilter
     ordering = ['id']
 
 

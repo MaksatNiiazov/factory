@@ -9,6 +9,8 @@ class CatalogConfig(AppConfig):
     verbose_name = _('Справочники')
 
     def ready(self):
+        import catalog.signals # noqa: F401
+
         from auditlog.registry import auditlog
         # Core models
         app_models = apps.get_app_config(self.label).get_models()

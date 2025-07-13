@@ -1210,6 +1210,25 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
         self.debug.append(f'#Поиск DetailType: Никаких исполнении не нашли. Завершаю поиск.')
 
         return None, None, None
+    
+    def get_parameters(self, available_options: Optional[Dict[str, Any]] = None) -> Tuple[Dict[str, Any], List[str]]:
+        """
+        Возвращает параметры, необходимые для создания изделия переменок.
+        """
+        parameters = {}
+
+        if not available_options:
+            available_options = self.get_available_options()
+        
+        # Диаметр трубопровода (OD)
+        parameters['OD'] = self.get_nominal_diameter_size()
+
+        # Монтажный размер (E)
+        parameters['E'] = available_options['calculated_system_height']
+
+        locked_parameters = ['E']
+        
+        return parameters, locked_parameters
 
     def get_available_options(self) -> Dict[str, Any]:
         """

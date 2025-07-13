@@ -299,6 +299,7 @@ class Base(resources.ModelResource, metaclass=DehydrateMetaClass):
         model = Item
         fields = []
         use_bulk = False
+        clean_model_instances = True
 
     @classmethod
     def get_display_name(cls) -> Optional[str]:

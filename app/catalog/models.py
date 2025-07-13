@@ -2,10 +2,6 @@ from django.db import models
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 
-from django.db.models.signals import post_save
-
-from django.dispatch import receiver
-
 from django.utils.translation import gettext_lazy as _
 from pybarker.django.db.models import ReadableJSONField
 
@@ -356,19 +352,6 @@ class Covering(CatalogMixin, SoftDeleteModelMixin, models.Model):
         return str(self.name)
 
 
-@receiver(post_save, sender=Material)
-def update_marking_on_items(sender, instance, **kwargs):
-    """
-    В случае изменения материала, заново генерируем маркировку в Item, так-как он зависит от данных в материале
-    """
-    from ops.models import Item
-
-    # TODO: Возможно можно оптимизировать, если сначала искать в DetailType.marking_template слова содержащий
-    #  material.name и material.group. На будущее
-    items = Item.objects.filter(material=instance)
-    items.generate_marking()
-
-
 class SupportDistance(CatalogMixin, SoftDeleteModelMixin, models.Model):
     """
     Справочник расстояний между опорами.
@@ -557,6 +540,27 @@ class SSBCatalog(CatalogMixin, models.Model):
 
     def __str__(self):
         return f'SSB {self.fn:04d}.?.?'
+
+
+class SSGCatalog(CatalogMixin, models.Model):
+    fn = models.PositiveIntegerField(verbose_name=_('Номинальная нагрузка, kN'))
+    l_min = models.PositiveIntegerField(verbose_name=_('L мин., мм'))
+    l_max = models.PositiveIntegerField(verbose_name=_('L макс., мм'))
+    l1 = models.PositiveIntegerField(null=True, blank=True, verbose_name=_('L1, мм'))
+    d = models.PositiveIntegerField(null=True, blank=True, verbose_name='ØD')
+    d1 = models.PositiveIntegerField(null=True, blank=True, verbose_name='ØD1')
+    r = models.PositiveIntegerField(null=True, blank=True, verbose_name='R')
+    s = models.PositiveIntegerField(null=True, blank=True, verbose_name='S')
+    sw = models.PositiveIntegerField(null=True, blank=True, verbose_name='SW')
+    regulation = models.PositiveIntegerField(null=True, blank=True, verbose_name=_('Регулировка, мм'))
+
+    class Meta:
+        verbose_name = _('Распорка SSG')
+        verbose_name_plural = _('Распорки SSG')
+        ordering = ['fn', 'l_min']
+
+    def __str__(self):
+        return f'SSG {self.fn:04d}.?.?'
 
 
 class ClampMaterialCoefficient(CatalogMixin, models.Model):

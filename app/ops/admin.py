@@ -260,7 +260,7 @@ class ItemAdmin(ImportMixin, admin.ModelAdmin):
         (_('Тип детали и исполнение'), {'fields': ('type', 'variant')}),
         (_('Параметры'),
          {'fields': ('weight', 'weight_errors', 'height', 'height_errors', 'chain_weight', 'chain_weight_errors',
-                     'spring_block_length', 'spring_block_length_errors', 'parameters', 'parameters_errors',
+                     'spring_block_length', 'spring_block_length_errors', 'parameters', 'parameters_errors', 'locked_parameters',
                      'material')}),
         (_('Синхронизация с ERP'), {'fields': ('erp_id', 'erp_nomspec')}),
         (_('Важные даты'), {'fields': ('created', 'modified')}),

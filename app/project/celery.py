@@ -1,6 +1,7 @@
 import os
 
 from celery import Celery
+from celery.signals import celeryd_init
 
 # set the default Django settings module for the 'celery' program.
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'project.settings')
@@ -13,3 +14,11 @@ app = Celery('project')
 app.config_from_object('django.conf:settings', namespace='CELERY')
 
 app.autodiscover_tasks()
+
+
+@celeryd_init.connect()
+def celery_start(**kwargs):
+    from django.core.cache import cache
+    from ops.constants import STALE_LOCK
+
+    cache.delete(STALE_LOCK)

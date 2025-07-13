@@ -1,14 +1,17 @@
+from functools import lru_cache
 import logging
 import re
 from typing import Tuple, Dict
 
 import jinja2
-from django.db.models import Q, Case, When, IntegerField
 
-from django.utils.module_loading import import_string
 from unidecode import unidecode
 
+from django.utils.crypto import hashlib
+from django.core.cache import cache
+
 from kernel.jinja2.filters import get_filters
+
 from ops.choices import AttributeType, AttributeCatalog
 
 logger = logging.getLogger(__name__)
@@ -24,6 +27,16 @@ def get_jinja2_env():
 _NORMALIZE_RE = re.compile(r'[^a-zA-Z0-9]+')
 _MULTIPLE_US_RE = re.compile(r'_+')
 _NUMERIC_START_RE = re.compile(r'^\d')
+
+TEMPLATE_KEY = "marktpl:%s"
+
+
+@lru_cache(maxsize=1024)
+def _get_template(src):
+    patched_src, alias = preprocess_template(src)
+    tpl = get_jinja2_env().from_string(patched_src)
+
+    return tpl
 
 
 def normalize_designation(designation: str) -> str:
@@ -106,6 +119,7 @@ class MarkingCompiler:
             self.marking_template = f'{{{{ {self.marking_template} }}}}'
 
     def get_children_context(self, context, children):
+        from ops.cache import get_cached_catalog_entry, get_cached_directory_entry
         from ops.models import Attribute, ItemChild
         from catalog.models import DirectoryEntry
 
@@ -128,7 +142,7 @@ class MarkingCompiler:
             # context[prefix]['weight'] = child.weight * count
 
             if child.parameters:
-                attributes = child.variant.get_attributes_dict()
+                attributes = child.variant.get_attributes_dict(cached=True)
 
                 params_context = {}
                 for key, value in child.parameters.items():
@@ -141,12 +155,10 @@ class MarkingCompiler:
 
                         if attribute.catalog not in allowed_builtin_catalogues:
                             directory_id = int(value)
-                            entry = DirectoryEntry.objects.get(id=value, directory_id=directory_id)
+                            entry = get_cached_directory_entry(directory_id, value)
                             params_context[key] = entry
                         else:
-                            package = f'catalog.models.{attribute.catalog}'
-                            catalog_model = import_string(package)
-                            instance = catalog_model.objects.get(pk=value)
+                            instance = get_cached_catalog_entry(package, value)
                             params_context[key] = instance
                     else:
                         params_context[key] = value
@@ -161,6 +173,7 @@ class MarkingCompiler:
             context[f'{prefix}.{index}'] = context[prefix]
 
     def compile(self):
+        from ops.cache import get_cached_catalog_entry, get_cached_directory_entry
         from ops.models import Attribute, ItemChild
 
         # Основные значения
@@ -173,7 +186,7 @@ class MarkingCompiler:
         # TODO: Кэширование (в redis)
         # TODO: Безопасность jinja2
         if self.item.parameters:
-            attributes = self.item.variant.get_attributes_dict()
+            attributes = self.item.variant.get_attributes_dict(cached=True)
 
             params_context = {}
             for key, value in self.item.parameters.items():
@@ -189,12 +202,11 @@ class MarkingCompiler:
                         from catalog.models import DirectoryEntry
 
                         directory_id = int(value)
-                        entry = DirectoryEntry.objects.get(id=value, directory_id=directory_id)
+                        entry = get_cached_directory_entry(directory_id, value)
                         params_context[key] = entry
                     else:
                         package = f'catalog.models.{attribute.catalog}'
-                        catalog_model = import_string(package)
-                        instance = catalog_model.objects.get(pk=value)
+                        instance = get_cached_catalog_entry(package, value)
                         params_context[key] = instance
                 else:
                     params_context[key] = value
@@ -204,12 +216,10 @@ class MarkingCompiler:
         if self.children:
             self.get_children_context(context, self.children)
         elif self.item.id:
-            children = ItemChild.objects.filter(parent=self.item)
+            children = self.item.get_children()
             self.get_children_context(context, children)
 
-        patched_template_src, self._alias_map = preprocess_template(self.marking_template)
-        logger.info('patched_template_src: %s', patched_template_src)
-        template = get_jinja2_env().from_string(patched_template_src)
+        template = _get_template(self.marking_template)
 
         context.update(**self.extra_context)
 

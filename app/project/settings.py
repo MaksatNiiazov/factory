@@ -99,7 +99,7 @@ WSGI_APPLICATION = 'project.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'wzn',
+        'NAME': 'wnz_active',
         'USER': 'postgres',
         'PASSWORD': 'Max332628',
         'HOST': '127.0.0.1',
@@ -264,16 +264,19 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # отключаем проверку кол-ва полей формы, иначе в админке падает если много всего
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000
 
-# Кеширование
-CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.memcached.PyMemcacheCache',
-        'LOCATION': '127.0.0.1:11211',
-        'KEY_PREFIX': 'ops:',
-    },
-}
-
 APP_REDIS_CONNECTION = 'redis://localhost:6379/2'
+
+# Кеширование
+# CACHES = {
+#     'default': {
+#         'BACKEND': 'django_redis.cache.RedisCache',
+#         'LOCATION': APP_REDIS_CONNECTION,
+#         'KEY_PREFIX': 'ops:',
+#         'OPTIONS': {
+#             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+#         },
+#     },
+# }
 
 CELERY_BROKER_URL = APP_REDIS_CONNECTION
 CELERY_ACCEPT_CONTENT = ['json']

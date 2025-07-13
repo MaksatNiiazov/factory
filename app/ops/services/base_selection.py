@@ -1,9 +1,9 @@
 from collections import defaultdict
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from catalog.models import ProductFamily
 from ops.choices import AttributeType, AttributeCatalog
-from ops.models import Attribute, Variant
+from ops.models import Attribute, ItemChild, Variant, Item
 
 
 class BaseSelectionAvailableOptions:
@@ -12,6 +12,7 @@ class BaseSelectionAvailableOptions:
         params = {
             'product_class': None,
             'product_family': None,
+            'variant': None,
         }
         return params
 
@@ -105,7 +106,7 @@ class BaseSelectionAvailableOptions:
         return ProductFamily.objects.get(id=self.params['product_family'])
 
     def get_variant(self):
-        variant_id = self.params['suitable_variant']
+        variant_id = self.params['variant']
 
         if not variant_id:
             return None
@@ -156,6 +157,82 @@ class BaseSelectionAvailableOptions:
                     rows_by_dt[it.type_id].remove(target_row)
 
         return specification
+    
+    def get_parameters(self, available_options: Optional[Dict[str, Any]] = None) -> Tuple[Dict[str, Any], List[str]]:
+        """
+        Возвращает параметры для создания или обновления изделия.
+        """
+        raise NotImplementedError("Метод get_parameters должен быть реализован в подклассе.")
+
+    def update_item(self, author, item: Item, parameters: Optional[Dict] = None, locked_parameters: Optional[List] = None, specifications: Optional[List] = None) -> Item:
+        current_parameters = item.parameters
+
+        if not current_parameters:
+            current_parameters = {}
+
+        if parameters:
+            current_parameters.update(parameters)
+            item.parameters = current_parameters
+
+        current_locked_parameters = item.locked_parameters
+
+        if not current_locked_parameters:
+            current_locked_parameters = []
+        
+        if locked_parameters:
+            current_locked_parameters.extend(locked_parameters)
+            item.locked_parameters = current_locked_parameters
+
+        item.clean()
+        item.save()
+
+        if specifications is None:
+            available_options = self.get_available_options()
+            specifications = available_options['specifications']
+        
+        children = item.children.all()
+
+        current_children = set((child.id, child.position, child.count) for child in children)
+        spec_items = set(
+            (spec['item'], spec['position'], spec['count'])
+            for spec in specifications if spec['item'] is not None
+        )
+
+        to_add = spec_items - current_children
+        to_remove = current_children - spec_items
+
+        for child in children:
+            key = (child.id, child.position, child.count)
+            if key in to_remove:
+                child.delete()
+
+        for item_id, position, count in to_add:
+            ItemChild.objects.create(
+                parent=item,
+                child_id=item_id,
+                position=position,
+                count=count,
+            )
+
+        return item
+
+    def create_item(self, author, parameters: Optional[Dict] = None, locked_parameters: Optional[List] = None, specifications: Optional[List] = None) -> Item:
+        variant = self.get_variant()
+
+        if not variant:
+            raise ValueError("Исполнение изделия еще не подобрано.")
+
+        if specifications is None:
+            available_options = self.get_available_options()
+            specifications = available_options['specifications']
+
+        item = Item(
+            type=variant.detail_type,
+            variant=variant,
+            author=author,
+        )
+
+        return self.update_item(author, item, parameters, locked_parameters, specifications)
 
     def get_available_options(self):
         raise NotImplementedError

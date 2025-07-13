@@ -4,15 +4,25 @@ from typing import List
 
 from celery import shared_task
 from celery.utils.log import get_task_logger
+
+from django.core.cache import cache
+
+from django.db.models import Prefetch
 from django.utils import timezone
 from django.utils.module_loading import import_string
+
 from tablib import Dataset
 
-from catalog.models import DirectoryEntry
 from kernel.consumers import send_event_to_all, send_event_to_users
 from kernel.erp import ERPApi
+
+from catalog.models import DirectoryEntry
+
+from ops.constants import STALE_SET_KEY, STALE_LOCK, STALE_BATCH
+from ops.models import Item, ItemChild
 from ops.choices import ERPSyncStatus, ERPSyncLogType, AttributeType, AttributeCatalog
 from ops.resources import get_resources_list
+
 from taskmanager.choices import TaskStatus
 from taskmanager.models import Task
 
@@ -20,31 +30,57 @@ logger = get_task_logger('erp_task_logger')
 
 
 @shared_task(ignore_result=True)
-def recalculate_item_parameters(item_ids: List[int]) -> None:
-    """
-    Асинхронная задача перерасчёта параметров для переданных Item'ов.
+def batch_recalculate_items():
+    try:
+        ids = cache.spop(STALE_SET_KEY, STALE_BATCH)
 
-    Если параметры изменились после пересчёта, обновляет их в базе данных.
-    Логирует предупреждение в случае ошибки при перерасчёте.
-    """
-    from ops.models import Item
+        if not ids:
+            return
 
-    items = Item.objects.filter(id__in=item_ids)
+        items = (
+            Item.objects.filter(id__in=ids)
+            .select_related("variant", "type")
+            .prefetch_related(
+                Prefetch(
+                    "parents",
+                    queryset=ItemChild.objects.select_related(
+                        "parent__variant", "parent__type"
+                    ),
+                ),
+            )
+            .iterator(chunk_size=1000)
+        )
 
-    changed_items = []
+        changed = []
+        parent_ids = set()
+        fields = ["parameters", "parameters_errors", "marking", "marking_errors", "name"]
 
-    for item in items:
-        try:
-            old_parameters = copy.deepcopy(item.parameters)
+        for item in items:
+            before = (copy.copy(item.parameters), item.marking, item.name)
+
             item.clean()
-            new_parameters = item.parameters
 
-            if old_parameters != new_parameters:
-                changed_items.append(item)
-        except Exception as exc:
-            logger.warning(f"Ошибка при перерасчёте параметров для Item(id={item.id}): {exc}")
+            if before != (item.parameters, item.marking, item.name):
+                changed.append(item)
+                parent_ids.update(item.parents.values_list("parent_id", flat=True))
 
-    Item.objects.bulk_update(changed_items, fields=['parameters', 'parameters_errors'])
+            if len(changed) >= 1000:
+                Item.objects.bulk_update(changed, fields, batch_size=200)
+                changed.clear()
+
+        if changed:
+            Item.objects.bulk_update(changed, fields, batch_size=100)
+
+        if parent_ids:
+            cache.sadd(STALE_SET_KEY, *parent_ids)
+
+        if cache.scard(STALE_SET_KEY):
+            batch_recalculate_items.delay()
+        else:
+            cache.delete(STALE_LOCK)
+    except Exception:
+        cache.delete(STALE_LOCK)
+        raise
 
 
 def sync_item_to_erp(api, erp_sync, item):
