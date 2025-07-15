@@ -23,7 +23,6 @@ router.register('pipe-mounting-rules', views.PipeMountingRuleViewSet)
 router.register('component-groups', views.ComponentGroupViewSet)
 router.register('spring-block-family-binding', views.SpringBlockFamilyBindingViewSet)
 router.register('ssb-catalog', views.SSBCatalogViewSet)
-router.register('ssg-catalog', views.SSGCatalogViewSet)
 router.register("clamp-material-coefficients", views.ClampMaterialCoefficientViewSet)
 router.register(r'action_history', ActionHistoryViewSet, basename='action_history')
 

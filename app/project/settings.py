@@ -107,7 +107,6 @@ DATABASES = {
     }
 }
 
-AUTH_USER_MODEL = 'ops.User'
 AUTHENTICATION_BACKENDS = [
     'ops.auth.CRMAuthBackend',
     'django.contrib.auth.backends.ModelBackend',

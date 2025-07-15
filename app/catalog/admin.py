@@ -5,7 +5,7 @@ from catalog.models import (
     LoadGroup, Material, PipeDiameter, NominalDiameter, CoveringType, Covering, Directory,
     DirectoryField, DirectoryEntry, DirectoryEntryValue, ProductFamily, ProductClass, Load, SpringStiffness,
     SupportDistance, PipeMountingGroup, PipeMountingRule, ComponentGroup, SpringBlockFamilyBinding, SSBCatalog,
-    ClampMaterialCoefficient, SSGCatalog
+    ClampMaterialCoefficient,
 )
 
 
@@ -242,13 +242,6 @@ class SSBCatalogAdmin(admin.ModelAdmin):
     )
     list_display_links = ('id',)
 
-
-@admin.register(SSGCatalog)
-class SSGCatalogAdmin(admin.ModelAdmin):
-    list_display = (
-        'id', 'fn', 'l_min', 'l_max', 'l1', 'd', 'd1', 'r', 's', 'sw', 'regulation',
-    )
-    list_display_links = ('id',)
 
 @admin.register(ClampMaterialCoefficient)
 class ClampMaterialCoefficientAdmin(admin.ModelAdmin):

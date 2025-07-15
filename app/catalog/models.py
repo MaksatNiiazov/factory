@@ -542,27 +542,6 @@ class SSBCatalog(CatalogMixin, models.Model):
         return f'SSB {self.fn:04d}.?.?'
 
 
-class SSGCatalog(CatalogMixin, models.Model):
-    fn = models.PositiveIntegerField(verbose_name=_('Номинальная нагрузка, kN'))
-    l_min = models.PositiveIntegerField(verbose_name=_('L мин., мм'))
-    l_max = models.PositiveIntegerField(verbose_name=_('L макс., мм'))
-    l1 = models.PositiveIntegerField(null=True, blank=True, verbose_name=_('L1, мм'))
-    d = models.PositiveIntegerField(null=True, blank=True, verbose_name='ØD')
-    d1 = models.PositiveIntegerField(null=True, blank=True, verbose_name='ØD1')
-    r = models.PositiveIntegerField(null=True, blank=True, verbose_name='R')
-    s = models.PositiveIntegerField(null=True, blank=True, verbose_name='S')
-    sw = models.PositiveIntegerField(null=True, blank=True, verbose_name='SW')
-    regulation = models.PositiveIntegerField(null=True, blank=True, verbose_name=_('Регулировка, мм'))
-
-    class Meta:
-        verbose_name = _('Распорка SSG')
-        verbose_name_plural = _('Распорки SSG')
-        ordering = ['fn', 'l_min']
-
-    def __str__(self):
-        return f'SSG {self.fn:04d}.?.?'
-
-
 class ClampMaterialCoefficient(CatalogMixin, models.Model):
     material_group = models.CharField(max_length=32, verbose_name=_("Группа материала"))
     temperature_from = models.PositiveSmallIntegerField(null=True, blank=True, verbose_name=_("Температура от, °C"))
