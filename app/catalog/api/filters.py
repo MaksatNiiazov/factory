@@ -5,7 +5,7 @@ from django.db import models
 from catalog.models import (
     PipeDiameter, LoadGroup, Material, NominalDiameter, CoveringType, Covering, SupportDistance,
     ProductFamily, PipeMountingGroup, PipeMountingRule, ComponentGroup, SpringBlockFamilyBinding,
-    SSBCatalog, ClampMaterialCoefficient,
+    SSBCatalog, ClampMaterialCoefficient, SSGCatalog
 )
 from kernel.api import lookups
 from kernel.api.filters import create_filterset
@@ -195,6 +195,22 @@ SSBCatalogFilter = create_filterset(SSBCatalog, {
     'h': lookups.INTEGER_LOOKUPS,
     'diameter_j': lookups.INTEGER_LOOKUPS,
 })
+
+
+SSGCatalogFilter = create_filterset(SSGCatalog, {
+    'id': lookups.INTEGER_LOOKUPS,
+    'fn': lookups.INTEGER_LOOKUPS,
+    'l_min': lookups.INTEGER_LOOKUPS,
+    'l_max': lookups.INTEGER_LOOKUPS,
+    'l1': lookups.INTEGER_LOOKUPS,
+    'd': lookups.INTEGER_LOOKUPS,
+    'd1': lookups.INTEGER_LOOKUPS,
+    'r': lookups.INTEGER_LOOKUPS,
+    's': lookups.INTEGER_LOOKUPS,
+    'sw': lookups.INTEGER_LOOKUPS,
+    'regulation': lookups.INTEGER_LOOKUPS,
+})
+
 
 class LogEntryFilter(django_filters.FilterSet):
     model = django_filters.CharFilter(

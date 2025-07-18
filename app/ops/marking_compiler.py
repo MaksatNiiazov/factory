@@ -158,6 +158,7 @@ class MarkingCompiler:
                             entry = get_cached_directory_entry(directory_id, value)
                             params_context[key] = entry
                         else:
+                            package = f'catalog.models.{attribute.catalog}'
                             instance = get_cached_catalog_entry(package, value)
                             params_context[key] = instance
                     else:

@@ -21,7 +21,7 @@ from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from django.core.files.base import ContentFile
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 
-from django.db import models
+from django.db import models, transaction
 from django.db.models import QuerySet, Q
 
 from django.utils.module_loading import import_string
@@ -257,9 +257,6 @@ class ProjectItem(SoftDeleteModelMixin, models.Model):
     class Meta:
         verbose_name = _('табличная часть проекта')
         verbose_name_plural = _('табличная часть проекта')
-        constraints = [models.UniqueConstraint(
-            fields=['project', 'position_number'], name='one_position_number_per_project')
-        ]
 
     @property
     def inner_marking(self):
@@ -311,8 +308,37 @@ class ProjectItem(SoftDeleteModelMixin, models.Model):
 
     def save(self, *args, **kwargs):
         """
-        При сохранении пересчитывает технические требования
+        Переопределенный метод save для автоматической генерации позиции и сдвига позиций при необходимости.
         """
+        from ops.models import ProjectItem
+
+        is_new = self.pk is None
+        prev_position = None
+
+        if not is_new:
+            prev = ProjectItem.objects.filter(pk=self.pk).first()
+            if prev:
+                prev_position = prev.position_number
+
+        # Автогенерация позиции
+        if self.position_number is None:
+            max_pos = (
+                ProjectItem.objects.filter(
+                    project=self.project
+                ).aggregate(models.Max('position_number'))['position_number__max'] or 0
+            )
+            self.position_number = max_pos + 1
+
+        elif is_new or self.position_number != prev_position:
+            # Сдвигаем всё вниз, начиная с позиции, если она уже занята
+            with transaction.atomic():
+                ProjectItem.objects.filter(
+                    project=self.project,
+                    position_number__gte=self.position_number,
+                ).exclude(pk=self.pk).order_by('-position_number').update(
+                    position_number=models.F('position_number') + 1
+                )
+
         self.generate_technical_requirements()
         super().save(*args, **kwargs)
 

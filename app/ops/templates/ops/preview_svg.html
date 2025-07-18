@@ -51,8 +51,9 @@
         <g fill="#000000" stroke="none">
 
             <image width="{{ image_data.image_width }}" height="{{ image_data.image_height }}" transform="scale(1 1)"
-                   x="{{ image_data.image_x }}mm" y="{{ image_data.image_y }}mm"
+                   x="{{ image_data.image_x }}" y="{{ image_data.image_y }}"
                    href="data:image/png;base64,{{ image_data.sketch }}"/>
+        
 
             <!-- Подпись размера грузовой цепи повернута, поэтому для x используем координату у -->
             <text id="chain_length" text-anchor="middle" font-size="11pt"

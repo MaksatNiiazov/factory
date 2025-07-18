@@ -93,3 +93,86 @@ class ProjectItemModelTest(TestCase):
 
         project_item.customer_marking = None
         self.assertEqual(project_item.display_marking(), self.item.marking)
+
+    def test_auto_assign_position(self):
+        """
+        Тест автоматического присвоения номера позиции при создании ProjectItem
+        """
+        item1 = ProjectItem.objects.create(project=self.project)
+        item2 = ProjectItem.objects.create(project=self.project)
+        item3 = ProjectItem.objects.create(project=self.project)
+
+        self.assertEqual(item1.position_number, 1)
+        self.assertEqual(item2.position_number, 2)
+        self.assertEqual(item3.position_number, 3)
+
+    def test_assign_specific_position_and_shift_others(self):
+        """
+        Тест присвоения конкретного номера позиции и сдвига других позиций
+        """
+        item1 = ProjectItem.objects.create(project=self.project, position_number=1)
+        item2 = ProjectItem.objects.create(project=self.project, position_number=2)
+        item3 = ProjectItem.objects.create(project=self.project, position_number=2)
+
+        positions = list(
+            ProjectItem.objects.filter(project=self.project).order_by('position_number').values_list(
+                'position_number', flat=True
+            )
+        )
+        self.assertEqual(positions, [1, 2, 3])
+        self.assertEqual(item3.position_number, 2)
+
+    def test_explicit_unique_position(self):
+        """
+        Тест уникальности номера позиции при создании ProjectItem
+        """
+        ProjectItem.objects.create(project=self.project, position_number=1)
+        ProjectItem.objects.create(project=self.project, position_number=2)
+        item3 = ProjectItem.objects.create(project=self.project, position_number=4)
+
+        self.assertEqual(item3.position_number, 4)
+
+        all_positions = sorted(
+            ProjectItem.objects.filter(project=self.project).values_list('position_number', flat=True)
+        )
+        self.assertEqual(all_positions, [1, 2, 4])
+
+    def test_update_without_position_change(self):
+        """
+        Тест обновления ProjectItem без изменения номера позиции
+        """
+        item1 = ProjectItem.objects.create(project=self.project, position_number=1)
+        item2 = ProjectItem.objects.create(project=self.project, position_number=2)
+
+        item2.customer_marking = 'UpdatedMarking'
+        item2.save()
+
+        positions = list(
+            ProjectItem.objects.filter(project=self.project).order_by('position_number').values_list(
+                'position_number', flat=True
+            )
+        )
+        self.assertEqual(positions, [1, 2])
+
+    def test_update_with_position_change(self):
+        """
+        Тест обновления ProjectItem с изменением номера позиции
+        """
+        item1 = ProjectItem.objects.create(project=self.project, position_number=1)
+        item2 = ProjectItem.objects.create(project=self.project, position_number=2)
+        item3 = ProjectItem.objects.create(project=self.project, position_number=3)
+
+        item3.position_number = 1
+        item3.save()
+
+        positions = list(
+            ProjectItem.objects.filter(project=self.project).order_by('position_number').values_list(
+                'position_number', flat=True
+            )
+        )
+        self.assertEqual(positions, [1, 2, 3])
+
+        ordered_ids = list(
+            ProjectItem.objects.filter(project=self.project).order_by('position_number').values_list('id', flat=True)
+        )
+        self.assertEqual(ordered_ids, [item3.id, item1.id, item2.id])

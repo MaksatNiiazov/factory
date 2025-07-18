@@ -1,5 +1,6 @@
 import copy
 import logging
+from io import BytesIO
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -45,6 +46,7 @@ from ops.api.serializers import (
     BaseCompositionSerializer, SelectionParamsSerializer, VariantWithDetailTypeSerializer, ShockCalcSerializer,
     ShockCalcResultSerializer, AvailableTopMountsRequestSerializer, TopMountVariantSerializer, AssemblyLengthSerializer,
     AvailableMountsRequestSerializer, MountingVariantSerializer, ShockSelectionParamsSerializer,
+
 )
 from ops.api.utils import get_extended_range, sum_mounting_sizes
 from ops.choices import ERPSyncType, AttributeUsageChoices, AttributeType
@@ -64,7 +66,7 @@ from ops.utils import render_sketch
 from taskmanager.api.serializers import TaskSerializer
 from taskmanager.choices import TaskType
 from taskmanager.models import Task, TaskAttachment
-
+from ops.services.spacer_selection import SpacerSelectionAvailableOptions
 User = get_user_model()
 
 logger = logging.getLogger(__file__)
@@ -285,7 +287,7 @@ class ProjectItemViewSet(CustomModelViewSet):
 
         selection_type = request.query_params.get('selection_type', 'product_selection')
 
-        if selection_type not in ['product_selection', 'shock_selection']:
+        if selection_type not in ['product_selection', 'shock_selection', 'ssg_selection']:
             return Response({
                 'detail': f'Некорректный selection_type: {selection_type}'
             }, status=400)
@@ -295,6 +297,8 @@ class ProjectItemViewSet(CustomModelViewSet):
 
         if selection_type == 'product_selection':
             params = ProductSelectionAvailableOptions.get_default_params()
+        elif selection_type == 'ssg_selection':
+            params = SpacerSelectionAvailableOptions.get_default_params()
         else:
             params = ShockSelectionAvailableOptions.get_default_params()
 
@@ -308,13 +312,16 @@ class ProjectItemViewSet(CustomModelViewSet):
 
         selection_type = request.query_params.get('selection_type', 'product_selection')
 
-        if selection_type not in ['product_selection', 'shock_selection']:
+        if selection_type not in ['product_selection', 'shock_selection', 'ssg_selection']:
             return Response({
                 'detail': f'Некорретный selection_type: {selection_type}'
             }, status=400)
 
         if selection_type == 'product_selection':
             selection_params_serializer = SelectionParamsSerializer(data=data)
+            selection_params_serializer.is_valid(raise_exception=True)
+        elif selection_type == 'ssg_selection':
+            selection_params_serializer = SpacerSelectionParamsSerializer(data=data)
             selection_params_serializer.is_valid(raise_exception=True)
         else:
             selection_params_serializer = ShockSelectionParamsSerializer(data=data)
@@ -332,7 +339,7 @@ class ProjectItemViewSet(CustomModelViewSet):
     def get_selection_options(self, request, project_pk, pk):
         selection_type = request.query_params.get('selection_type', 'product_selection')
 
-        if selection_type not in ['product_selection', 'shock_selection']:
+        if selection_type not in ['product_selection', 'shock_selection', 'ssg_selection']:
             return Response({
                 'detail': f'Некорретный selection_type: {selection_type}'
             }, status=400)
@@ -341,6 +348,8 @@ class ProjectItemViewSet(CustomModelViewSet):
 
         if selection_type == 'product_selection':
             available_options = ProductSelectionAvailableOptions(project_item).get_available_options()
+        elif selection_type == 'ssg_selection':
+            available_options = SpacerSelectionAvailableOptions(project_item).get_available_options()
         else:
             available_options = ShockSelectionAvailableOptions(project_item).get_available_options()
 
@@ -387,7 +396,7 @@ class ProjectItemViewSet(CustomModelViewSet):
         Генерирует SVG-эскиз для элемента проекта и возвращает его как файл.
         """
         # Получение элемента проекта по первичному ключу
-        project_item = ProjectItem.objects.get(pk=pk)
+        project_item = ProjectItem.objects.get(pk=pk, deleted_at__isnull=True)
 
         try:
             # Генерация SVG-эскиза и имени файла
@@ -396,8 +405,10 @@ class ProjectItemViewSet(CustomModelViewSet):
             raise ValidationError(str(exc))
 
         # Возвращение файла с SVG
-        response = FileResponse(string_svg.decode('utf-8'), content_type='image/svg+xml')
+        buffer = BytesIO(string_svg)
+        response = FileResponse(buffer, as_attachment=True, filename=filename, content_type='image/svg+xml')
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
         return response
 
     @action(methods=['POST'], detail=True)
@@ -982,7 +993,7 @@ class ItemViewSet(CustomModelViewSet):
     destroy: Удалить изделие/деталь/сборочную единицу по его идентификатору `id`
     """
     queryset = Item.objects.all()
-    permission_classes = [ERPSyncPermission | OwnActionPermission.build(owner_field='author') | ActionPermission]
+    # permission_classes = [ERPSyncPermission | OwnActionPermission.build(owner_field='author') | ActionPermission]
     filter_backends = [DjangoFilterBackend, MappedOrderingFilter, SearchFilter]
     filterset_class = ItemFilter
 

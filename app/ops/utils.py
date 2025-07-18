@@ -27,7 +27,7 @@ def extract_dependencies(expression: str) -> set:
 
     if expression.startswith("{{") and expression.endswith("}}"):
         expression = expression[2:-2].strip()
-    
+
     expression = re.sub(r'\|[a-zA-Z_]\w*(\([^)]*\))?', '', expression)
 
     tokens = re.split(r'[\s\+\-\*/\(\),|]+', expression)
@@ -55,7 +55,7 @@ def topological_sort(attributes):
             for dep in deps:
                 graph[dep].add(attr.name)
                 in_degree[attr.name] += 1
-    
+
     queue = deque([attr.name for attr in attributes if in_degree[attr.name] == 0])
     sorted_names = []
 
@@ -66,14 +66,14 @@ def topological_sort(attributes):
             in_degree[neighbor] -= 1
             if in_degree[neighbor] == 0:
                 queue.append(neighbor)
-    
+
     if len(sorted_names) != len(attributes):
         cycle_attrs = set(name_to_attr.keys()) - set(sorted_names)
         raise TopologicalSortException(
             message=f"Циклическая зависимость между атрибутами: {', '.join(cycle_attrs)}",
             fields=list(cycle_attrs),
         )
-    
+
     return [name_to_attr[name] for name in sorted_names]
 
 
@@ -90,24 +90,48 @@ def work_with_image(sketch_path, pji, double=False, coords=None):
     else:
         sketch = sketch_path
 
-    width, height, ratio = sketch.width, sketch.height, sketch.width / sketch.height
+    width_px, height_px = sketch.width, sketch.height
+    image_width_mm = width_px * PX_TO_MM
+    image_height_mm = height_px * PX_TO_MM
 
-    image_width, image_height = width, height
+    # Ограничения по размеру
+    max_mm = 650
+    scale_factor = min(max_mm / image_width_mm, max_mm / image_height_mm, 1.0)
+
+    # Применим масштабирование
+    scaled_width_mm = image_width_mm * scale_factor
+    scaled_height_mm = image_height_mm * scale_factor
+
+    # Смещение от центра
+    center_x, center_y = coords or (80, 100)
+    image_x = 80
+    image_y = 50
+
+    # Масштабированное изображение в пикселях (если хочешь реально уменьшить)
+    if scale_factor < 1.0:
+        new_width_px = int(width_px * scale_factor)
+        new_height_px = int(height_px * scale_factor)
+        sketch = sketch.resize((new_width_px, new_height_px), Image.Resampling.LANCZOS)
+
+    # Подпись для двойных изделий
+    horizontal_size_y = center_y + scaled_height_mm / 2 - UP_OF_SIZE_LINE if double else None
+
+    # Преобразуем в base64
     buffer = BytesIO()
     sketch.save(buffer, format="PNG")
     buffer.seek(0)
     new_image = base64.b64encode(buffer.read()).decode("utf-8")
 
-    center_x, center_y = coords or (80, 100)  # Координаты центра области в мм (иначе съезжает) для вставки png изображения
-    # Сместим изображение относительно центра, отсчет от левого верзнего угла
-    image_x, image_y = calculate_image_position(width, height, center_x, center_y)
-    # Подпись для двойных изделий
-    horizontal_size_y = round(center_y + image_height * PX_TO_MM / 2 - UP_OF_SIZE_LINE) if double else None
-    return {'image_x': image_x, 'image_y': image_y,
-            'image_width': image_width, 'image_height': image_height,
-            'center_x': center_x, 'center_y': center_y,
-            'sketch': new_image, 'horizontal_size_y':  horizontal_size_y}
-
+    return {
+        'image_x': "{:.2f}".format(image_x),
+        'image_y': "{:.2f}".format(image_y),
+        'image_width': "{:.2f}".format(scaled_width_mm),
+        'image_height': "{:.2f}".format(scaled_height_mm),
+        'center_x': center_x,
+        'center_y': center_y,
+        'sketch': new_image,
+        'horizontal_size_y': "{:.2f}".format(horizontal_size_y) if horizontal_size_y else None
+    }
 
 def wrap_words(comment):
     if comment is None:

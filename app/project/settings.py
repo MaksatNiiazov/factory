@@ -198,6 +198,7 @@ SWAGGER_SETTINGS = {
     'PERSIST_AUTH': True,
     'DEFAULT_AUTO_SCHEMA_CLASS': 'kernel.api.schema.AutoSchema',
     'DEFAULT_GENERATOR_CLASS': 'kernel.api.generators.SchemaGenerator',
+    'DOC_EXPANSION': 'none',
 }
 
 # django-cors-headers

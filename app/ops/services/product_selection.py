@@ -6,7 +6,7 @@ from django.db.models import Q, QuerySet, OuterRef, Exists, Count
 from catalog.choices import ComponentGroupType, Standard
 from catalog.models import (
     ClampMaterialCoefficient, Material, ProductFamily, PipeMountingGroup, PipeMountingRule, PipeDiameter, LoadGroup, ComponentGroup,
-    SupportDistance, SpringBlockFamilyBinding, CoveringType,
+    SupportDistance, SpringBlockFamilyBinding, CoveringType, ClampSelectionMatrix,
 )
 
 from ops.api.serializers import VariantSerializer
@@ -413,6 +413,32 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
         
         return load_group_ids
 
+    def clamp_is_compatible(self, *, matrix, hanger_lg, clamp_lgs):
+        entry_map = {
+            e.clamp_load_group: e
+            for e in matrix.entries.filter(
+                hanger_load_group=hanger_lg,
+                clamp_load_group__in=clamp_lgs,
+            )
+        }
+
+        for lg in clamp_lgs:
+            entry = entry_map.get(lg)
+
+            if not entry:
+                continue
+
+            if entry.result == "unlimited" and len(clamp_lgs) == 1:
+                return True
+            if (
+                entry.result == "adapter_required"
+                and len(clamp_lgs) >= 2
+                and hanger_lg in clamp_lgs
+            ):
+                return True
+
+        return False
+
     def get_available_clamps(self, variant: Variant, attributes: List[Attribute], pipe_clamps: QuerySet) -> List[int]:
         """
         Возвращает список доступных хомутов (Item) для выбранного варианта (Variant).
@@ -498,12 +524,15 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
                 return []
         
         # Этап 2: Проверка по материалу и температуре
+        self.debug.append('#Выбор крепления к трубе: Начинаю проверку по материалу и температуре.')
 
         # Температуры
         temp1, temp2 = self.get_temperatures()
+        self.debug.append(f'#Выбор крепления к трубе: Температура 1: {temp1}, Температура 2: {temp2}')
 
         # Введенная нагрузка
         load = self.get_load_minus_z()
+        self.debug.append(f'#Выбор крепления к трубе: Введенная нагрузка: {load}')
 
         # Группа материалов
         clamp_material = self.get_clamp_material()
@@ -513,6 +542,7 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
             return []
         
         material_group = clamp_material.group
+        self.debug.append(f'#Выбор крепления к трубе: Группа материала: {material_group}.')
 
         if not temp1:
             self.debug.append(
@@ -531,7 +561,9 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
             return []
         
         temp1_coefficient_value = temp1_material_coefficient.coefficient
+        self.debug.append(f'#Выбор крепления к трубе: Коэффициент материала для температуры {temp1}: {temp1_coefficient_value}')
         load_with_temp1_coefficient = load / temp1_coefficient_value
+        self.debug.append(f'#Выбор крепления к трубе: Нагрузка с учетом коэффициента для температуры {temp1}: {load_with_temp1_coefficient}')
 
         if temp2:
             temp2_material_coefficient = ClampMaterialCoefficient.objects.filter(
@@ -545,24 +577,31 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
                 return []
 
             temp2_coefficient_value = temp2_material_coefficient.coefficient
+            self.debug.append(f'#Выбор крепления к трубе: Коэффициент материала для температуры {temp2}: {temp2_coefficient_value}')
             load_with_temp2_coefficient = load / temp2_coefficient_value
+            self.debug.append(f'#Выбор крепления к трубе: Нагрузка с учетом коэффициента для температуры {temp2}: {load_with_temp2_coefficient}')
         else:
+            self.debug.append('#Выбор крепления к трубе: Не указана температура 2. Использую только температуру 1.')
             load_with_temp2_coefficient = None
         
         # Этап 3: Проверка крепления по типу покрытия
+        self.debug.append('#Выбор крепления к трубе: Начинаю проверку по типу покрытия.')
         if clamp_material.is_stainless_steel():
             required_covering_type_codes = [0]
+            self.debug.append(f'#Выбор крепления к трубе: Материал {clamp_material.name} - нержавеющая сталь. Требуется покрытие типа 0.')
         elif clamp_material.is_black_metal() and temp1 < 250:
             required_covering_type_codes = [1, 2]
+            self.debug.append(f'#Выбор крепления к трубе: Материал {clamp_material.name} - черный металл и температура < 250. Требуется покрытие типа 1 или 2.')
         elif clamp_material.is_black_metal() and temp1 >= 250:
             required_covering_type_codes = [3]
+            self.debug.append(f'#Выбор крепления к трубе: Материал {clamp_material.name} - черный металл и температура >= 250. Требуется покрытие типа 3.')
         else:
             self.debug.append(
                 f'#Выбор крепления к трубе: Неизвестный тип у материала {clamp_material.name}. Не могу найти подходящие хомуты.'
             )
             return []
         
-        covering_type_ids = CoveringType.objects.filter(numeric__in=required_covering_type_codes).values_list('id', flat=True)
+        covering_type_ids = list(CoveringType.objects.filter(numeric__in=required_covering_type_codes).values_list('id', flat=True))
 
         # Этап 4: Базовая фильтрация
         filter_params = {
@@ -607,9 +646,47 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
                 '#Выбор крепления к трубе: Нет монтажного размера или количество опор 1, фильтрация по нему не требуется.'
             )
         
-        found_items = list(pipe_clamps.filter(**filter_params).values_list('id', flat=True))
-        self.debug.append(f'#Выбор крепления к трубе: Найдено {len(found_items)} подходящих хомутов.')
-        return found_items
+        top_mount_item = self.get_top_mount_item()
+        found_items = pipe_clamps.filter(**filter_params)
+        self.debug.append(f'#Выбор крепления к трубе: Фильтрую по параметрам: {filter_params}')
+
+        if not top_mount_item:
+            self.debug.append(f'#Выбор крепления к трубе: Не выбрано верхнее крепление. Возвращаю найденные хомуты: {found_items.count()}')
+            return list(found_items.values_list('id', flat=True))
+        
+        self.debug.append(f'#Проверяем совместимость хомутов с верхним креплением {top_mount_item.name} (id={top_mount_item.id})')
+        top_attributes = top_mount_item.variant.get_attributes()
+        load_group_attribute = self.get_load_group_attribute(top_attributes)
+
+        if not load_group_attribute:
+            self.debug.append(
+                '#Выбор крепления к трубе: Не найден атрибут LoadGroup у верхнего крепления. Не могу найти подходящие хомуты.'
+            )
+            return []
+        
+        hanger_lgv = LoadGroup.objects.get(id=top_mount_item.parameters[load_group_attribute.name]).lgv
+
+        matrix = ClampSelectionMatrix.objects.filter(
+            product_family=self.get_selected_product_family(),
+            detail_types=variant.detail_type,
+        ).prefetch_related("entries").first()
+
+        if not matrix:
+            self.debug.append(f"#Выбор крепления к трубе: Не найден матрица выбора хомутов для семейства {self.get_selected_product_family()}.")
+            return []
+        
+        load_group_attributes = self.get_load_group_attributes(attributes)
+        compatible_item_ids = []
+
+        for item in found_items:
+            load_group_ids = [item.parameters[lg_attr.name] for lg_attr in load_group_attributes]
+            clamp_lgvs = LoadGroup.objects.filter(id__in=load_group_ids).values_list('lgv', flat=True)
+
+            if self.clamp_is_compatible(matrix=matrix, hanger_lg=hanger_lgv, clamp_lgs=clamp_lgvs):
+                compatible_item_ids.append(item.id)
+
+        self.debug.append(f"#После проверки по матрице осталось {len(compatible_item_ids)} хомут(ов)")
+        return compatible_item_ids
 
     def get_available_pipe_clamps(self) -> List[int]:
         """
@@ -784,6 +861,7 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
         Маркировка приводится к стандартному виду (добавляется ведущий 0 при необходимости).
         Если найдено несколько - берётся первый. Если не найден - возвращается None.
         """
+        self.debug.append('#Пружинный блок: Начинаю поиск детали пружинного блока по выбранному пружинному блоку.')
         selected_spring = self.get_selected_spring_block()
 
         if not selected_spring:
@@ -832,9 +910,22 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
             detail_type_id__in=allowed_detail_types,
         )
 
+        if not variants.exists():
+            self.debug.append(f'#Пружинный блок: Не найдено подходящих исполнений для серии {series_name}.')
+            self.debug.append(
+                f'#Пружинный блок: Проверьте, что есть ComponentGroup с типом SERIES_SELECTABLE и '
+                f'с атрибутами "Типоразмер" и "Номинальный ход".'
+            )
+            return None
+
         found_block_items = []
 
-        for variant in variants:
+        for variant_index, variant in enumerate(variants):
+            self.debug.append(
+                f'#Пружинный блок: Проверяю исполнение {variant_index + 1}/{variants.count()} - {variant.name} '
+                f'(id={variant.id})'
+            )
+
             # Получаем список атрибутов конкретного исполнения
             # Здесь так же задаем приоритетность атрибутов: атрибуты самого исполнения приоритетнее чем базовый атрибут
             attributes = variant.get_attributes()
@@ -849,12 +940,19 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
             size_key = f'parameters__{size_attribute.name}'
             stroke_key = f'parameters__{rated_stroke_attribute.name}'
 
+            self.debug.append(f'#Пружинный блок: Ищу детали по фильтру: {size_key}={size}, {stroke_key}={rated_stroke}')
+
             # TODO: Временное решение, нужно чтобы изначально в parameters хранился значение соответствующему типу.
             filtered_items = Item.objects.filter(
                 variant=variant
             ).filter(
                 Q(**{size_key: size}) | Q(**{size_key: str(size)}),
                 Q(**{stroke_key: rated_stroke}) | Q(**{stroke_key: str(rated_stroke)}),
+            )
+
+            self.debug.append(
+                f'#Пружинный блок: Найдено {filtered_items.count()} деталей по фильтру: '
+                f'{size_key}={size}, {stroke_key}={rated_stroke}'
             )
 
             found_block_items.extend(filtered_items)
@@ -1052,6 +1150,15 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
         for index, variant in enumerate(variants):
             self.debug.append(f'[{index + 1}/{total_variants}] {variant} (id={variant.id})')
+            attribute = Attribute.objects.for_variant(variant).filter(usage=AttributeUsageChoices.SYSTEM_HEIGHT).first()
+
+            if not attribute:
+                self.debug.append(
+                    f'#Поиск DetailType: У исполнения {variant} (id={variant.id}) не найден атрибут '
+                    f'с использованием SYSTEM_HEIGHT. Пропускаю.'
+                )
+                continue
+
             calculated_system_height, errors = self.calculate_system_height(variant)
 
             if errors:

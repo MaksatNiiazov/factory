@@ -133,7 +133,7 @@ class ProjectItemSerializer(CleanSerializerMixin, FlexFieldsModelSerializer):
     class Meta:
         model = ProjectItem
         fields = (
-            'id', 'original_item', 'customer_marking', 'count', 'revisions',
+            'id', 'position_number', 'original_item', 'customer_marking', 'count', 'revisions',
             'load_plus_x', 'load_plus_y', 'load_plus_z', 'load_minus_x', 'load_minus_y', 'load_minus_z',
             'additional_load_x', 'additional_load_y', 'additional_load_z',
             'move_plus_x', 'move_plus_y', 'move_plus_z', 'move_minus_x', 'move_minus_y', 'move_minus_z',
@@ -141,7 +141,7 @@ class ProjectItemSerializer(CleanSerializerMixin, FlexFieldsModelSerializer):
             'nominal_diameter', 'outer_diameter_special', 'insulation_thickness',
             'span', 'clamp_material', 'insert',
             'crm_mark_cont', 'work_type', 'selection_params',
-            'system_height',
+            'system_height', 'comment',
         )
         extra_kwargs = {
             'revisions': {'read_only': True},
@@ -425,6 +425,26 @@ class ShockSelectionParamsSerializer(serializers.Serializer):
     pipe_clamp = ShockSelectionPipeClampSerializer(required=True)
     variant = serializers.PrimaryKeyRelatedField(
         queryset=Variant.objects.all(), required=True, allow_null=True,
+    )
+
+
+class SpacerSelectionLoadAndMoveSerializer(serializers.Serializer):
+    installation_length = serializers.IntegerField(required=False, allow_null=True)
+    load = serializers.IntegerField(required=True, allow_null=True)
+    load_type = serializers.CharField(required=True, allow_null=True)
+    mounting_length = serializers.IntegerField(required=False, allow_null=True)
+
+
+class SpacerSelectionPipeOptionsSerializer(serializers.Serializer):
+    location = serializers.CharField(required=False, allow_null=True)
+    spacer_counts = serializers.IntegerField(required=False, allow_null=True)
+
+
+class SpacerSelectionParamsSerializer(serializers.Serializer):
+    load_and_move = SpacerSelectionLoadAndMoveSerializer(required=True)
+    pipe_options = SpacerSelectionPipeOptionsSerializer(required=True)
+    variant = serializers.PrimaryKeyRelatedField(
+        queryset=Variant.objects.all(), required=False, allow_null=True,
     )
 
 

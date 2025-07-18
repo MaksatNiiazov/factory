@@ -23,7 +23,7 @@ class CatalogMixin(models.Model):
 
     class Meta:
         abstract = True
-    
+
     @property
     def display_name(self):
         return str(self)
@@ -294,7 +294,7 @@ class Material(CatalogMixin, SoftDeleteModelMixin, models.Model):
         Проверяет, является ли материал нержавеющей сталью.
         """
         return self.type in [MaterialType.A, MaterialType.N]
-    
+
     def is_black_metal(self) -> bool:
         """
         Проверяет, является ли материал черным металлом.
@@ -542,6 +542,27 @@ class SSBCatalog(CatalogMixin, models.Model):
         return f'SSB {self.fn:04d}.?.?'
 
 
+class SSGCatalog(CatalogMixin, models.Model):
+    fn = models.PositiveIntegerField(verbose_name=_('Номинальная нагрузка, kN'))
+    l_min = models.PositiveIntegerField(verbose_name=_('L мин., мм'))
+    l_max = models.PositiveIntegerField(verbose_name=_('L макс., мм'))
+    l1 = models.PositiveIntegerField(null=True, blank=True, verbose_name=_('L1, мм'))
+    d = models.PositiveIntegerField(null=True, blank=True, verbose_name='ØD')
+    d1 = models.PositiveIntegerField(null=True, blank=True, verbose_name='ØD1')
+    r = models.PositiveIntegerField(null=True, blank=True, verbose_name='R')
+    s = models.PositiveIntegerField(null=True, blank=True, verbose_name='S')
+    sw = models.PositiveIntegerField(null=True, blank=True, verbose_name='SW')
+    regulation = models.PositiveIntegerField(null=True, blank=True, verbose_name=_('Регулировка, мм'))
+
+    class Meta:
+        verbose_name = _('Распорка SSG')
+        verbose_name_plural = _('Распорки SSG')
+        ordering = ['fn', 'l_min']
+
+    def __str__(self):
+        return f'SSG {self.fn:04d}.?.?'
+
+
 class ClampMaterialCoefficient(CatalogMixin, models.Model):
     material_group = models.CharField(max_length=32, verbose_name=_("Группа материала"))
     temperature_from = models.PositiveSmallIntegerField(null=True, blank=True, verbose_name=_("Температура от, °C"))
@@ -558,7 +579,7 @@ class ClampMaterialCoefficient(CatalogMixin, models.Model):
             models.F("temperature_from").asc(nulls_first=True),
             "temperature_to"
         ]
-    
+
     def clean(self):
         super().clean()
 
@@ -575,6 +596,44 @@ class ClampMaterialCoefficient(CatalogMixin, models.Model):
                 raise ValidationError({
                     "temperature_to": _("Максимальная температура не может быть меньше минимальной температуры."),
                 })
-    
+
     def __str__(self):
         return f"{self.material_group} ({self.temperature_from}°C - {self.temperature_to}°C): {self.coefficient}"
+
+
+class ClampSelectionMatrix(models.Model):
+    product_family = models.ForeignKey(ProductFamily, on_delete=models.CASCADE, null=True, verbose_name=_("Семейство изделий"))
+    detail_types = models.ManyToManyField('ops.DetailType', verbose_name=_("Типы деталей/изедлий"))
+
+    class Meta:
+        verbose_name = _("Матрица подбора хомутов")
+        verbose_name_plural = _("Матрицы подбора хомутов")
+
+    def __str__(self):
+        return f"Матрица для {self.product_family}"
+
+
+class ClampSelectionEntry(models.Model):
+    matrix = models.ForeignKey(ClampSelectionMatrix, on_delete=models.CASCADE, related_name='entries', verbose_name=_("Матрица подбора"))
+    hanger_load_group = models.PositiveIntegerField(verbose_name=_("Нагрузочная группа подвеса"))
+    clamp_load_group = models.PositiveIntegerField(verbose_name=_("Нагрузочная группа хомута"))
+    additional_clamp_load_group = models.PositiveIntegerField(null=True, blank=True, verbose_name=_("Дополнительная нагрузочная группа хомута для переходника"))
+
+    RESULT_CHOICES = (
+        ('unlimited', _("Собирается без ограничений")),
+        ('adapter_required', _("Собирается через переходник")),
+        ('not_possible', _("Не собирается")),
+    )
+
+    result = models.CharField(max_length=20, choices=RESULT_CHOICES, verbose_name=_("Результат подбора"))
+
+    class Meta:
+        unique_together = ('matrix', 'hanger_load_group', 'clamp_load_group')
+        verbose_name = _("Запись матрицы подбора")
+        verbose_name_plural = _("Записи матрицы подбора")
+
+    def __str__(self):
+        if self.additional_clamp_load_group:
+            return f"{self.hanger_load_group} ({self.clamp_load_group}/{self.additional_clamp_load_group}) - {self.get_result_display()}"
+        else:
+            return f"{self.hanger_load_group} ({self.clamp_load_group}) - {self.get_result_display()}"

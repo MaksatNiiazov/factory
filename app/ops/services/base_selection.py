@@ -63,6 +63,16 @@ class BaseSelectionAvailableOptions:
         )
         return found_load_group
 
+    def get_load_group_attributes(self, attributes: List[Attribute]) -> List[Attribute]:
+        """
+        Возвращает список атрибутов с типом 'Нагрузочная группа' из переданного списка атрибутов.
+        """
+        found_load_groups = [
+            attribute for attribute in attributes
+            if attribute.type == AttributeType.CATALOG and attribute.catalog == AttributeCatalog.LOAD_GROUP
+        ]
+        return found_load_groups
+
     def get_material_attribute(self, attributes: List[Attribute]) -> Optional[Attribute]:
         found_material = next(
             (

@@ -4,8 +4,9 @@ from django.utils.translation import gettext_lazy as _
 from catalog.models import (
     LoadGroup, Material, PipeDiameter, NominalDiameter, CoveringType, Covering, Directory,
     DirectoryField, DirectoryEntry, DirectoryEntryValue, ProductFamily, ProductClass, Load, SpringStiffness,
-    SupportDistance, PipeMountingGroup, PipeMountingRule, ComponentGroup, SpringBlockFamilyBinding, SSBCatalog,
-    ClampMaterialCoefficient,
+    SupportDistance, PipeMountingGroup, SSBCatalog, ClampMaterialCoefficient,
+    PipeMountingRule, ComponentGroup, SpringBlockFamilyBinding,
+    ClampSelectionMatrix, ClampSelectionEntry, SSGCatalog
 )
 
 
@@ -243,7 +244,37 @@ class SSBCatalogAdmin(admin.ModelAdmin):
     list_display_links = ('id',)
 
 
+@admin.register(SSGCatalog)
+class SSGCatalogAdmin(admin.ModelAdmin):
+    list_display = (
+        'id', 'fn', 'l_min', 'l_max', 'l1', 'd', 'd1', 'r', 's', 'sw', 'regulation',
+    )
+    list_display_links = ('id',)
+
 @admin.register(ClampMaterialCoefficient)
 class ClampMaterialCoefficientAdmin(admin.ModelAdmin):
     list_display = ["id", "material_group", "temperature_from", "temperature_to", "coefficient"]
     list_display_links = ["id"]
+
+
+class ClampSelectionEntryInline(admin.TabularInline):
+    model = ClampSelectionEntry
+    extra = 0
+
+
+@admin.register(ClampSelectionMatrix)
+class ClampSelectionMatrixAdmin(admin.ModelAdmin):
+    list_display = ["id", "product_family", "get_detail_types"]
+    list_display_links = ["id"]
+    filter_horizontal = ["detail_types"]
+    autocomplete_fields = ["product_family"]
+    inlines = [ClampSelectionEntryInline]
+
+    @admin.display(description=_('Типы деталей/изделии'))
+    def get_detail_types(self, obj):
+        detail_types = list(obj.detail_types.all()[:5])
+        names = [detail_type.designation for detail_type in detail_types]
+
+        if obj.detail_types.count() > 5:
+            return ', '.join(names) + ', ...'
+        return ', '.join(names)
