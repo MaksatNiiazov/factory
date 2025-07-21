@@ -5,8 +5,9 @@ from django.db.models import Q, QuerySet, OuterRef, Exists, Count
 
 from catalog.choices import ComponentGroupType, Standard
 from catalog.models import (
-    ClampMaterialCoefficient, Material, ProductFamily, PipeMountingGroup, PipeMountingRule, PipeDiameter, LoadGroup, ComponentGroup,
-    SupportDistance, SpringBlockFamilyBinding, CoveringType, ClampSelectionMatrix,
+    ClampMaterialCoefficient, Material, ProductFamily, PipeMountingGroup, PipeMountingRule, PipeDiameter, LoadGroup,
+    ComponentGroup,
+    SupportDistance, SpringBlockFamilyBinding, CoveringType, ClampSelectionMatrix, ClampSelectionEntry,
 )
 
 from ops.api.serializers import VariantSerializer
@@ -305,9 +306,32 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
         if pipe_mount_id:
             pipe_mount = Item.objects.get(id=pipe_mount_id)
-            return pipe_mount
 
-        return None
+            load_group_id = pipe_mount.parameters['LGV']
+            load_group_lgv = LoadGroup.objects.get(id=load_group_id).lgv
+
+            entry = ClampSelectionEntry.objects.filter(
+                matrix__product_family=self.get_selected_product_family(),
+                hanger_load_group=self.get_lgv(),
+                clamp_load_group=load_group_lgv,
+            ).first()
+
+            if entry.result == "unlimited":
+                zom = Item.objects.filter(
+                    type_id__in=entry.matrix.detail_types.values_list('id', flat=True),
+                    parameters__LGV=load_group_id,
+                ).first()
+                return pipe_mount, zom
+            elif entry.result == "adapter_required":
+                additional_load_group = LoadGroup.objects.get(lgv=entry.additional_clamp_load_group)
+                zom = Item.objects.filter(
+                    type_id__in=entry.matrix.detail_types.values_list('id', flat=True),
+                    parameters__LGV=load_group_id,
+                    parameters__LGV2=additional_load_group.id,
+                ).first()
+                return pipe_mount, zom
+
+        return None, None
 
     def get_top_mount_item(self) -> Optional[Item]:
         """
@@ -318,6 +342,7 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
         if top_mount_id:
             top_mount = Item.objects.get(id=top_mount_id)
+
             return top_mount
 
         return None
@@ -388,6 +413,17 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
             return [2]
 
         return []
+
+    def get_lgv(self):
+        selected_spring = self.get_selected_spring_block()
+
+        if not selected_spring:
+            self.debug.append('#Не удалось получить выбранный пружинный блок.')
+            return None
+
+        lgv = selected_spring.get('load_group_lgv')
+
+        return lgv
 
     def get_load_group_ids_by_lgv(self) -> List[int]:
         """
@@ -646,47 +682,10 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
                 '#Выбор крепления к трубе: Нет монтажного размера или количество опор 1, фильтрация по нему не требуется.'
             )
         
-        top_mount_item = self.get_top_mount_item()
         found_items = pipe_clamps.filter(**filter_params)
         self.debug.append(f'#Выбор крепления к трубе: Фильтрую по параметрам: {filter_params}')
 
-        if not top_mount_item:
-            self.debug.append(f'#Выбор крепления к трубе: Не выбрано верхнее крепление. Возвращаю найденные хомуты: {found_items.count()}')
-            return list(found_items.values_list('id', flat=True))
-        
-        self.debug.append(f'#Проверяем совместимость хомутов с верхним креплением {top_mount_item.name} (id={top_mount_item.id})')
-        top_attributes = top_mount_item.variant.get_attributes()
-        load_group_attribute = self.get_load_group_attribute(top_attributes)
-
-        if not load_group_attribute:
-            self.debug.append(
-                '#Выбор крепления к трубе: Не найден атрибут LoadGroup у верхнего крепления. Не могу найти подходящие хомуты.'
-            )
-            return []
-        
-        hanger_lgv = LoadGroup.objects.get(id=top_mount_item.parameters[load_group_attribute.name]).lgv
-
-        matrix = ClampSelectionMatrix.objects.filter(
-            product_family=self.get_selected_product_family(),
-            detail_types=variant.detail_type,
-        ).prefetch_related("entries").first()
-
-        if not matrix:
-            self.debug.append(f"#Выбор крепления к трубе: Не найден матрица выбора хомутов для семейства {self.get_selected_product_family()}.")
-            return []
-        
-        load_group_attributes = self.get_load_group_attributes(attributes)
-        compatible_item_ids = []
-
-        for item in found_items:
-            load_group_ids = [item.parameters[lg_attr.name] for lg_attr in load_group_attributes]
-            clamp_lgvs = LoadGroup.objects.filter(id__in=load_group_ids).values_list('lgv', flat=True)
-
-            if self.clamp_is_compatible(matrix=matrix, hanger_lg=hanger_lgv, clamp_lgs=clamp_lgvs):
-                compatible_item_ids.append(item.id)
-
-        self.debug.append(f"#После проверки по матрице осталось {len(compatible_item_ids)} хомут(ов)")
-        return compatible_item_ids
+        return list(found_items.values_list('id', flat=True))
 
     def get_available_pipe_clamps(self) -> List[int]:
         """
@@ -1003,9 +1002,13 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
         if spring_block:
             children.append(spring_block)
 
-        pipe_mount = self.get_pipe_mount_item()
+        pipe_mount, zom = self.get_pipe_mount_item()
+
         if pipe_mount:
             children.append(pipe_mount)
+
+        if zom:
+            children.append(zom)
 
         top_mount = self.get_top_mount_item()
         if top_mount:
@@ -1076,9 +1079,11 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
             )
             return None, None, None
 
-        pipe_mount_item = Item.objects.get(id=pipe_mount)
+        pipe_mount_item, zom = self.get_pipe_mount_item()
+        items_for_specification.append(pipe_mount_item)
 
-        items_for_specification.append(pipe_mount)
+        if zom:
+            items_for_specification.append(zom)
 
         pipe_mount_detail_types = BaseComposition.objects.filter(
             base_child=pipe_mount_item.type, count=1,
@@ -1220,8 +1225,12 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
                 ).filter(**query_param)
 
                 if items.exists():
-                    items_for_specification.append(items.first())
+                    first_item = items.first()
+                    items_for_specification.append(first_item)
+                    item_system_height = first_item.parameters[attr_name]
+                    calculated_system_height = calculated_system_height + item_system_height
                     self.debug.append(f'Найдено подходящее исполнение с одной шпилькой. Поиск завершен.')
+                    self.debug.append(f'Окончательная системная высота: {calculated_system_height}')
                     return variant, calculated_system_height, items_for_specification
             elif total == 2:
                 comp1, comp2 = base_compositions
@@ -1261,6 +1270,8 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
                             items_for_specification.append(it1)
                             items_for_specification.append(it2)
                             self.debug.append(f'Найдено подходящее исполнение с двумя шпилькой. Поиск завершен.')
+                            calculated_system_height = calculated_system_height + val1 + val2
+                            self.debug.append(f'Окончательная системная высота: {calculated_system_height}')
                             return variant, calculated_system_height, items_for_specification
             elif total == 3:
                 comp1, comp2, comp3 = base_compositions
@@ -1310,6 +1321,8 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
                                 items_for_specification.append(it2)
                                 items_for_specification.append(it3)
                                 self.debug.append(f'Найдено подходящее исполнение с тремя шпилькой. Поиск завершен.')
+                                calculated_system_height = calculated_system_height + total_length
+                                self.debug.append(f'Окончательная системная высота: {calculated_system_height}')
                                 return variant, calculated_system_height, items_for_specification
 
             self.debug.append(f'Не подходит, иду к следующему исполнению.')
@@ -1328,7 +1341,7 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
             available_options = self.get_available_options()
         
         # Диаметр трубопровода (OD)
-        parameters['OD'] = self.get_nominal_diameter_size()
+        parameters['OD'] = self.get_pipe_diameter().id
 
         # Монтажный размер (E)
         parameters['E'] = available_options['calculated_system_height']
@@ -1369,11 +1382,20 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
                 'count': self.params['pipe_options']['branch_qty'],
             })
         if self.params['pipe_clamp']['pipe_mount']:
+            pipe_mount, zom = self.get_pipe_mount_item()
             debug_specification.append({
                 'id': self.params['pipe_clamp']['pipe_mount'],
                 'position': None,
                 'count': 1,
             })
+
+            if zom:
+                debug_specification.append({
+                    'id': zom.id,
+                    'position': None,
+                    'count': 1,
+                })
+
         if self.params['pipe_clamp']['top_mount']:
             debug_specification.append({
                 'id': self.params['pipe_clamp']['top_mount'],

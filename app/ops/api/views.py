@@ -45,7 +45,7 @@ from ops.api.serializers import (
     CRMProjectSerializer, ItemExportSerializer, ItemImportSerializer, CRMProjectSyncERPSerializer,
     BaseCompositionSerializer, SelectionParamsSerializer, VariantWithDetailTypeSerializer, ShockCalcSerializer,
     ShockCalcResultSerializer, AvailableTopMountsRequestSerializer, TopMountVariantSerializer, AssemblyLengthSerializer,
-    AvailableMountsRequestSerializer, MountingVariantSerializer, ShockSelectionParamsSerializer,
+    AvailableMountsRequestSerializer, MountingVariantSerializer, ShockSelectionParamsSerializer, SpacerSelectionParamsSerializer,
 
 )
 from ops.api.utils import get_extended_range, sum_mounting_sizes

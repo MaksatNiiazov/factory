@@ -1268,6 +1268,7 @@ class Item(SoftDeleteModelMixin, TimeStampedModel, models.Model):
                 errors[attribute.name] = str(exc)
                 return None, errors
             except Exception as exc:
+                print(traceback.format_exception(exc))
                 logger.exception('Unexpected error occurred while compiling attribute %s in Item.id=%d', attribute.name, self.id)
                 errors[attribute.name] = str(exc)
                 return None, errors

@@ -20,6 +20,20 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
                 'location': None,
                 'spacer_counts': None,
             },
+            'pipe_params': {
+                'temperature': None,
+                'pipe_diameter': None,
+                'pipe_diameter_size_manual': None,
+                'support_distance': None,
+                'support_distance_manual': None,
+                'mounting_group_a': None,
+                'mounting_group_b': None,
+                'material': None,
+            },
+            'pipe_clamp': {
+                'pipe_clamp_a': None,
+                'pipe_clamp_b': None,
+            },
             'variant': None,
         }
 

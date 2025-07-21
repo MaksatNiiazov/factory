@@ -279,7 +279,8 @@ class ItemSerializer(CleanSerializerMixin, FlexFieldsModelSerializer):
         model = Item
         fields = (
             'id', 'type', 'variant', 'inner_id', 'name', 'marking', 'marking_errors', 'comment',
-            'weight', 'weight_errors', 'height', 'height_errors', 'parameters', 'parameters_errors', 'locked_parameters',
+            'weight', 'weight_errors', 'height', 'height_errors', 'parameters', 'parameters_errors',
+            'locked_parameters',
             'material', 'author', 'erp_id', 'created', 'modified',
         )
         extra_kwargs = {
@@ -440,9 +441,41 @@ class SpacerSelectionPipeOptionsSerializer(serializers.Serializer):
     spacer_counts = serializers.IntegerField(required=False, allow_null=True)
 
 
+class SpacerSelectionPipeParamsSerializer(serializers.Serializer):
+    temperature = serializers.FloatField(required=False, allow_null=True)
+    pipe_diameter = serializers.PrimaryKeyRelatedField(
+        queryset=PipeDiameter.objects.all(), required=False, allow_null=True,
+    )
+    pipe_diameter_size_manual = serializers.FloatField(required=False, allow_null=True)
+    support_distance = serializers.PrimaryKeyRelatedField(
+        queryset=SupportDistance.objects.all(), required=False, allow_null=True,
+    )
+    support_distance_manual = serializers.FloatField(required=False, allow_null=True)
+    mounting_group_a = serializers.PrimaryKeyRelatedField(
+        queryset=PipeMountingGroup.objects.all(), required=False, allow_null=True,
+    )
+    mounting_group_b = serializers.PrimaryKeyRelatedField(
+        queryset=PipeMountingGroup.objects.all(), required=False, allow_null=True,
+    )
+    material = serializers.PrimaryKeyRelatedField(
+        queryset=Material.objects.all(), required=False, allow_null=True,
+    )
+
+
+class SpacerSelectionPipeClampSerializer(serializers.Serializer):
+    pipe_clamp_a = serializers.PrimaryKeyRelatedField(
+        queryset=Item.objects.all(), required=False, allow_null=True,
+    )
+    pipe_clamp_b = serializers.PrimaryKeyRelatedField(
+        queryset=Item.objects.all(), required=False, allow_null=True,
+    )
+
+
 class SpacerSelectionParamsSerializer(serializers.Serializer):
     load_and_move = SpacerSelectionLoadAndMoveSerializer(required=True)
     pipe_options = SpacerSelectionPipeOptionsSerializer(required=True)
+    pipe_params = SpacerSelectionPipeParamsSerializer(required=True)
+    pipe_clamp = SpacerSelectionPipeClampSerializer(required=True)
     variant = serializers.PrimaryKeyRelatedField(
         queryset=Variant.objects.all(), required=False, allow_null=True,
     )
