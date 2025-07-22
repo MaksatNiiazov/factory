@@ -340,49 +340,73 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
         """
         self.debug.append('#Список креплений A: Начинаю поиск доступных креплений A')
 
-        # TODO: Проверить что будет если pipe_diameter_size_manual указан
-        pipe_diameter = PipeDiameter.objects.filter(id=self.params['pipe_params']['pipe_diameter']).first()
+        # Получаем диаметр трубы
+        pipe_diameter_id = self.params['pipe_params']['pipe_diameter']
+        pipe_diameter = PipeDiameter.objects.filter(id=pipe_diameter_id).first()
 
         if not pipe_diameter:
-            self.debug.append("#Список креплений A: Не выбран или не найден диаметр трубы. Поиск невозможен.")
+            self.debug.append(
+                f"#Список креплений A: Не выбран или не найден диаметр трубы с id={pipe_diameter_id}. Поиск невозможен.")
             return []
 
+        # Получаем группу креплений A
         mounting_group_a = self.get_mounting_group_a()
-
         if not mounting_group_a:
             self.debug.append("#Список креплений A: Не выбрана группа креплений A. Поиск невозможен.")
             return []
-        
+
         variants = mounting_group_a.variants.all()
-
         items = Item.objects.filter(variant__in=variants)
-
         found_items = []
 
         for variant in variants:
             self.debug.append(f"#Список креплений A: Проверяю исполнение {variant} (id={variant.id})")
             attributes = variant.get_attributes()
 
-            # Найти хомута по нагрузке и диаметру трубы
+            if not attributes:
+                self.debug.append(f"#Список креплений A: У варианта id={variant.id} нет атрибутов.")
+                continue
+
             if self.is_clamp(attributes):
-                # Это хомут
                 self.debug.append(f"#Список креплений A: Исполнение {variant} является хомутом")
+
                 load_attribute = self.get_attribute_by_usage(attributes, AttributeUsageChoices.LOAD)
                 pipe_diameter_attribute = self.get_pipe_diameter_attribute(attributes)
 
+                if not load_attribute or not pipe_diameter_attribute:
+                    self.debug.append(
+                        f"#Список креплений A: У варианта {variant.id} отсутствует нужный атрибут: "
+                        f"LOAD={bool(load_attribute)}, DIAMETER={bool(pipe_diameter_attribute)}"
+                    )
+                    continue
+
+                load_value = self.get_load()
+                diameter_id = pipe_diameter.id
+
+                self.debug.append(
+                    f"#Список креплений A: Фильтрация по параметрам: "
+                    f"{load_attribute.name}={load_value}, {pipe_diameter_attribute.name}={diameter_id}"
+                )
+
                 filter_params = {
                     'variant': variant,
-                    f'parameters__{load_attribute.name}': self.get_load(),
-                    f'parameters__{pipe_diameter_attribute.name}': pipe_diameter.id,
+                    f'parameters__{load_attribute.name}': load_value,
+                    f'parameters__{pipe_diameter_attribute.name}': diameter_id,
                 }
-                clamp_items = list(items.filter(**filter_params).values_list('id', flat=True))
 
-                self.debug.append(f"#Список креплений A: Найдено {len(clamp_items)} хомутов для исполнения {variant}")
-                found_items.extend(clamp_items)
+                matching_items = list(items.filter(**filter_params).values_list('id', flat=True))
+
+                self.debug.append(
+                    f"#Список креплений A: Найдено {len(matching_items)} хомутов для исполнения {variant}.")
+
+                found_items.extend(matching_items)
+            else:
+                self.debug.append(f"#Список креплений A: Исполнение {variant} не является хомутом.")
 
         if not found_items:
             self.debug.append("#Список креплений A: Не найдено подходящих хомутов.")
-            return []
+        else:
+            self.debug.append(f"#Список креплений A: Итоговое количество найденных хомутов: {len(found_items)}")
 
         return found_items
 
@@ -850,6 +874,36 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
         return parameters, []
 
     def get_available_options(self):
+        self.debug = []
+
+
+        if not self.initialize_selection_params():
+            print(self.debug)
+            return {
+                'debug': self.debug,
+                'suitable_variant': None,
+                'shock_result': None,
+                'specifications': [],
+                'load_and_move': {
+                    'load_types': self.get_available_load_types(),
+                },
+                'pipe_options': {
+                    'locations': self.get_available_pipe_locations(),
+                    'shock_counts': self.get_available_shock_counts(),
+                },
+                'pipe_params': {
+                    'pipe_diameters': list(PipeDiameter.objects.all().values_list('id', flat=True)),
+                    'support_distances': list(SupportDistance.objects.all().values_list('id', flat=True)),
+                    'mounting_groups_a': [],
+                    'mounting_groups_b': [],
+                    'materials': list(Material.objects.all().values_list('id', flat=True)),
+                },
+                'pipe_clamp': {
+                    'pipe_clamps_a': [],
+                    'pipe_clamps_b': [],
+                },
+            }
+
         available_load_types = self.get_available_load_types()
         available_pipe_locations = self.get_available_pipe_locations()
         available_shock_counts = self.get_available_shock_counts()
@@ -890,3 +944,49 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
         }
 
         return available_options
+
+    def initialize_selection_params(self) -> bool:
+        self.debug.append('#Инициализация: начинаем проверку входных данных.')
+
+        # Проверка product_family
+        if not self.params.get('product_family'):
+            self.debug.append('#Инициализация: не указано семейство изделий (product_family).')
+            return False
+
+        # Проверка количества амортизаторов
+        shock_counts = self.params.get('pipe_options', {}).get('shock_counts')
+        if not shock_counts:
+            self.debug.append('#Инициализация: не указано количество амортизаторов (shock_counts).')
+            return False
+
+        # Проверка направления трубы
+        pipe_location = self.params.get('pipe_options', {}).get('location')
+        if not pipe_location:
+            self.debug.append('#Инициализация: не указано направление трубы (pipe_location).')
+            return False
+
+        # Преобразование направления трубы в pipe_direction
+        if pipe_location == 'horizontal':
+            directions = ['x', 'y']
+        elif pipe_location == 'vertical':
+            directions = ['z']
+        else:
+            self.debug.append(f'#Инициализация: неизвестное направление трубы: {pipe_location}')
+            return False
+
+        # Поиск правила крепления
+        rules = PipeMountingRule.objects.filter(
+            family_id=self.params['product_family'],
+            num_spring_blocks=shock_counts
+        )
+
+        rules = rules.filter(pipe_direction__in=directions)
+
+        rule = rules.first()
+
+        if not rule:
+            self.debug.append('#Инициализация: не найдено правило PipeMountingRule для указанных параметров.')
+            return False
+
+        self.debug.append('#Инициализация: входные данные корректны, найдено правило подбора.')
+        return True

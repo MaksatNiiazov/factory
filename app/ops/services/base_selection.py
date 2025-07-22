@@ -2,7 +2,7 @@ from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple
 
 from catalog.models import ProductFamily
-from ops.choices import AttributeType, AttributeCatalog
+from ops.choices import AttributeType, AttributeCatalog, AttributeUsageChoices
 from ops.models import Attribute, ItemChild, Variant, Item
 
 
@@ -41,15 +41,22 @@ class BaseSelectionAvailableOptions:
 
     def get_pipe_diameter_attribute(self, attributes: List[Attribute]) -> Optional[Attribute]:
         """
-        Возвращает атрибут с типом "Номинальный диаметр трубы" (PipeDiameter) из переданного списка атрибутов.
+        Возвращает атрибут, который представляет диаметр трубы, основываясь на типе использования или названии.
         """
-        found_pipe_diameter = next(
-            (
-                attribute for attribute in attributes
-                if attribute.type == AttributeType.CATALOG and attribute.catalog == AttributeCatalog.PIPE_DIAMETER
-            ), None
-        )
-        return found_pipe_diameter
+        # Наиболее точный способ — usage
+        for attr in attributes:
+            if attr.usage == AttributeUsageChoices.PIPE_DIAMETER:
+                self.debug.append(f"#Найден атрибут диаметра по usage=PIPE_DIAMETER: {attr}")
+                return attr
+
+        # Альтернативный способ — по имени
+        for attr in attributes:
+            if attr.name.lower() in ['диаметр', 'наружный_диаметр', 'pipe_diameter', 'diameter']:
+                self.debug.append(f"#Найден атрибут диаметра по имени: {attr.name}")
+                return attr
+
+        self.debug.append(f"#Атрибут диаметра трубы не найден среди атрибутов исполнения.")
+        return None
 
     def get_load_group_attribute(self, attributes: List[Attribute]) -> Optional[Attribute]:
         """

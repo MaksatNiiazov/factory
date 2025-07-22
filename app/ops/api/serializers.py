@@ -472,6 +472,12 @@ class SpacerSelectionPipeClampSerializer(serializers.Serializer):
 
 
 class SpacerSelectionParamsSerializer(serializers.Serializer):
+    product_class = serializers.PrimaryKeyRelatedField(
+        queryset=ProductClass.objects.all(), required=True, allow_null=True,
+    )
+    product_family = serializers.PrimaryKeyRelatedField(
+        queryset=ProductFamily.objects.all(), required=True, allow_null=True,
+    )
     load_and_move = SpacerSelectionLoadAndMoveSerializer(required=True)
     pipe_options = SpacerSelectionPipeOptionsSerializer(required=True)
     pipe_params = SpacerSelectionPipeParamsSerializer(required=True)

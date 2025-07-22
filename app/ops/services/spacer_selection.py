@@ -10,6 +10,8 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
     @classmethod
     def get_default_params(cls):
         return {
+            'product_class': None,
+            'product_family': None,
             'load_and_move': {
                 'installation_length': None,
                 'load': None,
