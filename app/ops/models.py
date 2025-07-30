@@ -1551,8 +1551,8 @@ class BaseComposition(SoftDeleteModelMixin, models.Model):
         ordering = ('base_parent', 'position')
 
     def clean(self):
-        # if self.base_parent_variant and self.base_parent_variant.detail_type_id != self.base_parent_id:
-        #     raise ValidationError(_('Исполнение не принадлежит типу детали'))
+        if self.base_parent_variant and self.base_parent_variant.detail_type_id != self.base_parent_id:
+            raise ValidationError(_('Исполнение не принадлежит типу детали'))
 
         if self.base_child_variant and self.base_child_variant.detail_type_id != self.base_child_id:
             raise ValidationError(_('Исполнение не принадлежит типу детали'))

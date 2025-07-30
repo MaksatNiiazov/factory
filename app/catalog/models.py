@@ -190,6 +190,7 @@ class DirectoryEntryValue(SoftDeleteModelMixin, models.Model):
         except (ValueError, TypeError) as e:
             raise ValidationError(f'Невозможно преобразовать значение "{new_value}" к типу {ftype}: {e}')
 
+
 class NominalDiameter(CatalogMixin, SoftDeleteModelMixin, models.Model):
     dn = models.PositiveSmallIntegerField(verbose_name=_('Номинальный диаметр'), unique=True)
 
@@ -396,7 +397,6 @@ class ProductFamily(CatalogMixin, SoftDeleteModelMixin, models.Model):
         default=False, blank=True, verbose_name=_('Альтернативный расчет высоты за счет регулировки штока'),
     )
 
-
     class Meta:
         verbose_name = _('Семейство изделий')
         verbose_name_plural = _('Семейства изделий')
@@ -491,7 +491,8 @@ class ComponentGroup(CatalogMixin, SoftDeleteModelMixin, models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=['group_type'], condition=models.Q(deleted_at__isnull=True), name='unique_group_type_if_not_deleted'
+                fields=['group_type'], condition=models.Q(deleted_at__isnull=True),
+                name='unique_group_type_if_not_deleted'
             )
         ]
         verbose_name = _('Группа компонентов')
@@ -541,26 +542,50 @@ class SSBCatalog(CatalogMixin, models.Model):
     def __str__(self):
         return f'SSB {self.fn:04d}.?.?'
 
+class SSGCatalog(models.Model):
+    """Каталог распорок SSG (номинальная нагрузка, диапазоны длины, тип конструкции и пр.)"""
 
-class SSGCatalog(CatalogMixin, models.Model):
-    fn = models.PositiveIntegerField(verbose_name=_('Номинальная нагрузка, kN'))
-    l_min = models.PositiveIntegerField(verbose_name=_('L мин., мм'))
-    l_max = models.PositiveIntegerField(verbose_name=_('L макс., мм'))
-    l1 = models.PositiveIntegerField(null=True, blank=True, verbose_name=_('L1, мм'))
-    d = models.PositiveIntegerField(null=True, blank=True, verbose_name='ØD')
-    d1 = models.PositiveIntegerField(null=True, blank=True, verbose_name='ØD1')
-    r = models.PositiveIntegerField(null=True, blank=True, verbose_name='R')
-    s = models.PositiveIntegerField(null=True, blank=True, verbose_name='S')
-    sw = models.PositiveIntegerField(null=True, blank=True, verbose_name='SW')
-    regulation = models.PositiveIntegerField(null=True, blank=True, verbose_name=_('Регулировка, мм'))
+    fn = models.PositiveIntegerField(verbose_name=_('Номинальная нагрузка, кН'), blank=True, null=True)
+
+    # Диапазон длины
+    l_min = models.PositiveIntegerField(verbose_name=_('Мин. длина L, мм'), blank=True, null=True)
+    l_max = models.PositiveIntegerField(verbose_name=_('Макс. длина L, мм'), blank=True, null=True)
+
+    # Габариты
+    l1 = models.PositiveIntegerField(verbose_name=_('Размер L1, мм'), blank=True, null=True)
+    l2 = models.PositiveIntegerField(verbose_name=_('Размер L2, мм'), blank=True, null=True)
+    d = models.PositiveIntegerField(verbose_name=_('Диаметр D, мм'), blank=True, null=True)
+    d1 = models.PositiveIntegerField(verbose_name=_('Диаметр D1, мм'), blank=True, null=True)
+    r = models.PositiveIntegerField(verbose_name=_('R (радиус/гиб), мм'), blank=True, null=True)
+    s = models.PositiveIntegerField(verbose_name=_('Толщина S, мм'), blank=True, null=True)
+    sw = models.PositiveIntegerField(verbose_name=_('Размер SW (под ключ), мм'), blank=True, null=True)
+
+    # Поля, встречающиеся только у типа 2
+    h = models.PositiveIntegerField(verbose_name=_('Толщина H, мм'), null=True, blank=True)
+    sw1 = models.PositiveIntegerField(verbose_name=_('Размер SW1 (под ключ), мм'), null=True, blank=True)
+    sw2 = models.PositiveIntegerField(verbose_name=_('Размер SW2 (под ключ), мм'), null=True, blank=True)
+
+    # Дополнительно
+    regulation = models.PositiveIntegerField(verbose_name=_('Регулировка длины, мм'), blank=True, null=True)
+    fixed_part = models.FloatField(verbose_name=_('Фиксированная часть, кг'), null=True, blank=True)
+    delta_l = models.FloatField(verbose_name=_('ΔL, кг/м'), null=True, blank=True)
+
+    # Тип распорки
+    type = models.PositiveSmallIntegerField(
+        choices=((1, _('Тип 1')), (2, _('Тип 2'))),
+        verbose_name=_('Тип распорки'), blank=True, null=True
+    )
 
     class Meta:
-        verbose_name = _('Распорка SSG')
-        verbose_name_plural = _('Распорки SSG')
-        ordering = ['fn', 'l_min']
+        verbose_name = _('Распорка SSG (каталог)')
+        verbose_name_plural = _('Распорки SSG (каталог)')
+        ordering = ['type', 'fn']
+        constraints = [
+            models.UniqueConstraint(fields=['fn', 'type', 'l_min', 'l_max'], name='unique_ssg_variant')
+        ]
 
     def __str__(self):
-        return f'SSG {self.fn:04d}.?.?'
+        return f"SSG {self.fn} кН (Тип {self.type}, L: {self.l_min}-{self.l_max} мм)"
 
 
 class ClampMaterialCoefficient(CatalogMixin, models.Model):
@@ -602,7 +627,8 @@ class ClampMaterialCoefficient(CatalogMixin, models.Model):
 
 
 class ClampSelectionMatrix(models.Model):
-    product_family = models.ForeignKey(ProductFamily, on_delete=models.CASCADE, null=True, verbose_name=_("Семейство изделий"))
+    product_family = models.ForeignKey(ProductFamily, on_delete=models.CASCADE, null=True,
+                                       verbose_name=_("Семейство изделий"))
     detail_types = models.ManyToManyField('ops.DetailType', verbose_name=_("Типы деталей/изедлий"))
 
     class Meta:
@@ -614,10 +640,12 @@ class ClampSelectionMatrix(models.Model):
 
 
 class ClampSelectionEntry(models.Model):
-    matrix = models.ForeignKey(ClampSelectionMatrix, on_delete=models.CASCADE, related_name='entries', verbose_name=_("Матрица подбора"))
+    matrix = models.ForeignKey(ClampSelectionMatrix, on_delete=models.CASCADE, related_name='entries',
+                               verbose_name=_("Матрица подбора"))
     hanger_load_group = models.PositiveIntegerField(verbose_name=_("Нагрузочная группа подвеса"))
     clamp_load_group = models.PositiveIntegerField(verbose_name=_("Нагрузочная группа хомута"))
-    additional_clamp_load_group = models.PositiveIntegerField(null=True, blank=True, verbose_name=_("Дополнительная нагрузочная группа хомута для переходника"))
+    additional_clamp_load_group = models.PositiveIntegerField(null=True, blank=True, verbose_name=_(
+        "Дополнительная нагрузочная группа хомута для переходника"))
 
     RESULT_CHOICES = (
         ('unlimited', _("Собирается без ограничений")),

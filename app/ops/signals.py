@@ -19,7 +19,7 @@ def _mark_items_as_stale(qs):
     if not ids:
         return
 
-    # cache.sadd(STALE_SET_KEY, *ids)
+    cache.sadd(STALE_SET_KEY, *ids)
 
     if cache.add(STALE_LOCK, "1", timeout=300):
         batch_recalculate_items.delay()

@@ -1,7 +1,7 @@
 from django.shortcuts import get_object_or_404
 from rest_framework.exceptions import ValidationError
 
-from catalog.models import PipeMountingRule
+from catalog.models import PipeMountingRule, ProductFamily
 from ops.api.constants import LOAD_FACTORS, FN_ON_REQUEST
 from ops.api.utils import get_extended_range
 from ops.choices import AttributeUsageChoices
@@ -26,25 +26,24 @@ def calculate_shock_block(data: dict, user):
 
     factor = LOAD_FACTORS[load_type]
     nom_per = (load_value / factor) / branch_qty
+    sn_margin = abs(sn) * config.SSB_SN_MARGIN_COEF
 
     fn_candidates = [
         e for e in catalog
         if isinstance(e.get('fn'), (int, float))
-           and e['fn'] != FN_ON_REQUEST
-           and e['fn'] >= nom_per
+        and e['fn'] != FN_ON_REQUEST
+        and e['fn'] >= nom_per
     ]
     if not fn_candidates:
         raise ValidationError("Нагрузка слишком велика")
 
-    sn_margin = abs(sn) * config.SSB_SN_MARGIN_COEF
+    family = item.type.product_family
+    allow_rod_adjustment = family.has_rod if isinstance(family, ProductFamily) else False
 
     for fn_entry in sorted(fn_candidates, key=lambda x: x['fn']):
         fn_val = fn_entry['fn']
         stroke_entries = sorted(
-            [e for e in catalog
-             if e.get('fn') == fn_val
-             and isinstance(e.get('stroke'), (int, float))
-             and e['stroke'] >= sn_margin],
+            [e for e in catalog if e.get('fn') == fn_val and isinstance(e.get('stroke'), (int, float)) and e['stroke'] >= sn_margin],
             key=lambda x: x['stroke']
         )
         for sel in stroke_entries:
@@ -54,16 +53,16 @@ def calculate_shock_block(data: dict, user):
 
             if mounting_length is None:
                 return {
-                    "item_id": data['item_id'],
+                    "item_id": item.id,
                     "result": f"SSB {fn_val:04d}.{stroke:03d}.0000.1",
                     "fn": fn_val, "stroke": stroke, "type": 1,
                     "mounting_length": None, "extender": 0.0,
                     "L2_req": round(L2_avg, 3),
                     "L2_min": L2_min, "L2_max": L2_max, "L2_avg": L2_avg,
                     "L3": L3, "L4": L4, "block_length": block_len,
+                    "debug": ["#Регулировка не используется: монтажная длина не указана"]
                 }
 
-            family = item.type.product_family
             rule = PipeMountingRule.objects.filter(
                 family=family,
                 num_spring_blocks=branch_qty,
@@ -80,19 +79,20 @@ def calculate_shock_block(data: dict, user):
 
             total_mount = 0.0
             for v in chosen:
-                attr = v.get_attributes().filter(name=AttributeUsageChoices.INSTALLATION_SIZE).first()
+                # ⚠️ важно: теперь используем get_available_attributes, чтобы учитывать и базовые атрибуты
+                attr = v.get_available_attributes().filter(name=AttributeUsageChoices.INSTALLATION_SIZE).first()
                 mount_val = None
                 if attr:
                     raw = item.parameters.get(attr.name)
                     if raw is not None:
                         try:
                             mount_val = float(raw)
-                        except:
+                        except Exception:
                             pass
                     if mount_val is None and attr.default is not None:
                         try:
                             mount_val = float(attr.default)
-                        except:
+                        except Exception:
                             pass
                 total_mount += mount_val or 0.0
 
@@ -102,19 +102,28 @@ def calculate_shock_block(data: dict, user):
 
             type_ = None
             extender = 0.0
-            if L2_min <= L2_req <= L2_max:
-                type_ = 1
-            elif use_extra:
-                mn, mx = get_extended_range(L2_avg, sn, stroke)
-                if mn <= L2_req <= mx:
+            debug_msg = []
+            warning_msg = None
+
+            if allow_rod_adjustment:
+                if L2_min <= L2_req <= L2_max:
                     type_ = 1
+                    debug_msg.append("#Подбор: Используется регулировка штока")
+                    warning_msg = "ВНИМАНИЕ! ПОДБОР НЕСТАНДАРТНЫЙ, РЕГУЛИРОВКА ДЛИНЫ ОСУЩЕСТВЛЯЕТСЯ ЗА СЧЕТ ХОДА ШТОКА!"
+                elif use_extra:
+                    mn, mx = get_extended_range(L2_avg, sn, stroke)
+                    if mn <= L2_req <= mx:
+                        type_ = 1
+                        debug_msg.append("#Подбор: Регулировка штока с допуском")
+                        warning_msg = "ВНИМАНИЕ! ПОДБОР НЕСТАНДАРТНЫЙ, РЕГУЛИРОВКА ДЛИНЫ ОСУЩЕСТВЛЯЕТСЯ ЗА СЧЕТ ХОДА ШТОКА!"
 
             if not type_:
                 type_ = 2
                 extender = max(L2_req - block_len, 0.0)
+                debug_msg.append("#Подбор: Используется удлинитель (тип 2)")
 
             return {
-                "item_id": data['item_id'],
+                "item_id": item.id,
                 "result": f"SSB {fn_val:04d}.{stroke:03d}.{int(mounting_length):04d}.{type_}",
                 "fn": fn_val, "stroke": stroke, "type": type_,
                 "mounting_length": mounting_length,
@@ -122,6 +131,8 @@ def calculate_shock_block(data: dict, user):
                 "L2_req": round(L2_req, 3),
                 "L2_min": L2_min, "L2_max": L2_max, "L2_avg": L2_avg,
                 "L3": L3, "L4": L4, "block_length": block_len,
+                "debug": debug_msg,
+                "warning": warning_msg if allow_rod_adjustment else None
             }
 
     raise ValidationError("Не удалось подобрать гидроамортизатор для заданных параметров.")

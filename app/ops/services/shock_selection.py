@@ -186,7 +186,8 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
         support_distance = SupportDistance.objects.filter(id=support_distance_id).first()
 
         if not support_distance:
-            self.debug.append(f'Не найдено расстояние между опорами трубы с id={support_distance_id}. Возможно оно было удалено.')
+            self.debug.append(
+                f'Не найдено расстояние между опорами трубы с id={support_distance_id}. Возможно оно было удалено.')
             return None
 
         return support_distance.value
@@ -307,13 +308,13 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
         if not mounting_group_a_id:
             self.debug.append("Не выбрана группа креплений A.")
             return None
-        
+
         mounting_group_a = PipeMountingGroup.objects.filter(id=mounting_group_a_id).first()
 
         if not mounting_group_a:
             self.debug.append(f"Группа креплений A с id={mounting_group_a_id} не найдена. Возможно она была удалена.")
             return None
-        
+
         return mounting_group_a
 
     def get_mounting_group_b(self) -> Optional[PipeMountingGroup]:
@@ -325,13 +326,13 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
         if not mounting_group_b_id:
             self.debug.append("Не выбрана группа креплений B.")
             return None
-        
+
         mounting_group_b = PipeMountingGroup.objects.filter(id=mounting_group_b_id).first()
 
         if not mounting_group_b:
             self.debug.append(f"Группа креплений B с id={mounting_group_b_id} не найдена. Возможно она была удалена.")
             return None
-        
+
         return mounting_group_b
 
     def get_available_pipe_clamps_a(self) -> List[int]:
@@ -361,7 +362,7 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
         for variant in variants:
             self.debug.append(f"#Список креплений A: Проверяю исполнение {variant} (id={variant.id})")
-            attributes = variant.get_attributes()
+            attributes = variant.detail_type.get_attributes()
 
             if not attributes:
                 self.debug.append(f"#Список креплений A: У варианта id={variant.id} нет атрибутов.")
@@ -420,7 +421,7 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
         if not mounting_group_b:
             self.debug.append("#Список креплений B: Не выбрана группа креплений B. Поиск невозможен.")
             return []
-        
+
         variants = mounting_group_b.variants.all()
 
         items = Item.objects.filter(variant__in=variants)
@@ -429,7 +430,7 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
         for variant in variants:
             self.debug.append(f"#Список креплений B: Проверяю исполнение {variant} (id={variant.id})")
-            attributes = variant.get_attributes()
+            attributes = variant.detail_type.get_attributes()
 
             # Найти скобы по нагрузке
             if self.is_bracket(attributes):
@@ -531,13 +532,13 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
         if not pipe_clamp_a_id:
             return None
-        
+
         pipe_clamp_a = Item.objects.filter(pk=pipe_clamp_a_id).first()
 
         if not pipe_clamp_a:
             self.debug.append(f'Крепление A с id={pipe_clamp_a_id} не найдено. Возможно оно было удалено.')
             return None
-        
+
         return pipe_clamp_a
 
     def is_clamp_b_required(self) -> bool:
@@ -564,13 +565,13 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
         if not pipe_clamp_b_id:
             return None
-        
+
         pipe_clamp_b = Item.objects.filter(pk=pipe_clamp_b_id).first()
 
         if not pipe_clamp_b:
             self.debug.append(f'Крепление B с id={pipe_clamp_b_id} не найдено. Возможно оно было удалено.')
             return None
-        
+
         return pipe_clamp_b
 
     def get_sn_margin(self) -> float:
@@ -591,210 +592,112 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
         на основе выбранных компонентов.
         """
         load = self.get_load()
+        sn_margin = self.get_sn_margin()
+        shock_counts = self.get_shock_counts()
+        installation_length = self.get_installation_length()
 
         if not load:
             self.debug.append('Не задана пользовательская нагрузка. Поиск исполнения изделия невозможен.')
             return None, None, None
-
-        sn_margin = self.get_sn_margin()
-
         if not sn_margin:
             self.debug.append('Не задано перемещение с запасом. Поиск исполнения изделия невозможен.')
             return None, None, None
-
-        shock_counts = self.get_shock_counts()
-
         if not shock_counts:
             self.debug.append('Не задано количество амортизаторов. Поиск исполнения изделия невозможен.')
             return None, None, None
 
-        installation_length = self.get_installation_length()
-
-        base_items_for_specification = []
-        required_base_composition = 0
-        suitable_variants = Variant.objects.all()
-
-        pipe_clamp_a = self.get_pipe_clamp_a()
-
-        if not pipe_clamp_a and self.is_clamp_a_required():
-            self.debug.append('#Поиск исполнения изделия: Не выбран крепление A.')
+        base_items_for_specification = self._get_base_items()
+        if base_items_for_specification is None:
             return None, None, None
-
-        if pipe_clamp_a:
-            base_items_for_specification.append(pipe_clamp_a)
-            required_base_composition += 1
-            pipe_clamp_a_variants = BaseComposition.objects.filter(
-                Q(base_child=pipe_clamp_a.type) | Q(base_child_variant=pipe_clamp_a.variant), count=1,
-            ).values_list('base_parent_variant', flat=True)
-            suitable_variants = suitable_variants.filter(id__in=pipe_clamp_a_variants)
-
-        pipe_clamp_b = self.get_pipe_clamp_b()
-
-        if not pipe_clamp_b and self.is_clamp_b_required():
-            self.debug.append('#Поиск исполнения изделия: Не выбран крепление B.')
-            return None, None, None
-
-        if pipe_clamp_b:
-            base_items_for_specification.append(pipe_clamp_b)
-            required_base_composition += 1
-
-            pipe_clamp_b_variants = BaseComposition.objects.filter(
-                Q(base_child=pipe_clamp_b.type) | Q(base_child_variant=pipe_clamp_b.variant), count=1,
-            ).values_list('base_parent_variant', flat=True)
-            suitable_variants = suitable_variants.filter(id__in=pipe_clamp_b_variants)
-
-        has_load_attr = Attribute.objects.filter(
-            Q(variant=OuterRef('pk')) | Q(detail_type=OuterRef('detail_type')),
-            usage=AttributeUsageChoices.LOAD,
-        )
-        has_rated_stroke_attr = Attribute.objects.filter(
-            Q(variant=OuterRef('pk')) | Q(detail_type=OuterRef('detail_type')),
-            usage=AttributeUsageChoices.RATED_STROKE,
-        )
-
-        self.debug.append('#Поиск исполнения изделия: Проверяем чтобы в базовом составе был гидроамортизатор с атрибутами LOAD и RATED_STROKE.')
-        shock_variants = Variant.objects.annotate(
-            has_load_attr=Exists(has_load_attr),
-            has_rated_stroke_attr=Exists(has_rated_stroke_attr),
-        ).filter(
-            has_load_attr=True,
-            has_rated_stroke_attr=True,
-        )
-
-        if shock_variants.exists():
-            required_base_composition += 1
-            shock_parent_variants = BaseComposition.objects.filter(
-                Q(base_child__variants__in=shock_variants) | Q(base_child_variant__in=shock_variants), count=shock_counts,
-            ).values_list('base_parent_variant', flat=True)
-            suitable_variants = suitable_variants.filter(id__in=shock_parent_variants)
-        else:
-            self.debug.append(f'#Поиск исполнения изделия: Не найдено подходящих исполнений гидроамортизаторов с атрибутами LOAD и RATED_STROKE.')
-            return None, None, None
-
-        installation_size_attr = Attribute.objects.filter(
-            Q(variant=OuterRef('pk')) | Q(detail_type=OuterRef('detail_type')),
-            usage=AttributeUsageChoices.INSTALLATION_SIZE,
-        )
-
-        self.debug.append(f'#Поиск исполнения изделия: Проверяем наличие атрибута INSTALLATION_SIZE в исполнениях изделия.')
-        suitable_variants = suitable_variants.annotate(
-            has_installation_size_attr=Exists(installation_size_attr),
-        ).filter(
-            has_installation_size_attr=True,
-        )
-
-        self.debug.append(f'#Поиск исполнения изделия: Проверяем что количество в базовом составе равно {required_base_composition}.')
-        suitable_variants = suitable_variants.annotate(
-            base_compositions_count=Count('base_parent', filter=Q(base_parent__deleted_at=None))
-        ).filter(
-            base_compositions_count=required_base_composition
-        )
-
-        total_variants = suitable_variants.count()
-
-        self.debug.append(f'Поиск исполнения изделия: Нашли {total_variants} исполнении, начинаю циклично проверять.')
 
         candidates = SSBCatalog.objects.filter(
             fn__gte=load,
             stroke__gte=sn_margin,
         ).exclude(fn=FN_ON_REQUEST).order_by('fn', 'stroke')
 
-        for candidate in candidates:
-            check_load = candidate.fn
+        variants = Variant.objects.filter(detail_type__product_family=self.get_product_family())
 
-            self.debug.append(f'Проверяю исполнение изделия для нагрузки {check_load} Н.')
-            for index, variant in enumerate(suitable_variants):
-                self.debug.append(f'[{index + 1}/{total_variants}] {variant} (id={variant.id}) (detail_type_id={variant.detail_type_id})')
+        current_fn = None
+        for fn, group in self._group_by(candidates, key=lambda c: c.fn).items():
+            self.debug.append(f'=== Проверяем нагрузку FN = {fn} Н ===')
+            for stroke, stroke_group in self._group_by(group, key=lambda c: c.stroke).items():
+                self.debug.append(f'  -- Проверяем ход Sn = {stroke} мм --')
+                for candidate in stroke_group:
+                    for variant in variants:
+                        self.debug.append(f'Пробуем вариант {variant} (id={variant.id})')
 
-                shock = self.get_shock_item(variant, check_load)
+                        shock = self.get_shock_item(variant, fn)
+                        if not shock:
+                            self.debug.append('Не найден амортизатор для варианта.')
+                            continue
 
-                if not shock:
-                    self.debug.append(
-                        'Не найден амортизатор. Пропускаем поиск этого исполнения.'
-                    )
-                    continue
+                        items_for_specification = copy(base_items_for_specification)
+                        items_for_specification.append(shock)
 
-                items_for_specification = copy(base_items_for_specification)
-                items_for_specification.append(shock)
-                shock_counts = self.get_shock_counts()
+                        mounting_length, errors = self.calculate_mounting_length(variant, items_for_specification)
+                        if errors:
+                            self.debug.append(f'Ошибка расчета монтажной длины: {errors}')
+                            continue
 
-                mounting_length, errors = self.calculate_mounting_length(variant, items_for_specification)
+                        if installation_length is not None:
+                            l_block = installation_length - mounting_length
+                            self.debug.append(
+                                f'L_req = {installation_length}, монтажный размер = {mounting_length}, '
+                                f'L_block = {l_block}'
+                            )
 
-                if errors:
-                    self.debug.append(f'Ошибка при расчете монтажной длины: {errors}')
-                    continue
+                            if candidate.l2_min and candidate.l2_max and candidate.l2_min <= l_block <= candidate.l2_max:
+                                self.debug.append('Подходит тип 2: попадаем в диапазон L2.')
+                                return self._return_result(variant, candidate, fn, candidate.stroke, l_block,
+                                                           mounting_length, type_=2,
+                                                           items_for_specification=items_for_specification)
 
-                l_block = None
-                if installation_length is not None:
-                    l_block = installation_length - mounting_length
-                    self.debug.append(f'Полная монтажная длина: {installation_length}, монтажная длина: {mounting_length}, ')
-                    self.debug.append(f'Требуемая длина блока: {l_block}')
+                            if candidate.l and candidate.f:
+                                l1 = candidate.l + candidate.f
+                                if abs(l_block - l1) <= 5:
+                                    self.debug.append(f'Подходит тип 1: L1 = {l1}, близко к L_block.')
+                                    return self._return_result(variant, candidate, fn, candidate.stroke, l_block,
+                                                               mounting_length, type_=1,
+                                                               items_for_specification=items_for_specification)
 
-                    if l_block is None:
-                        self.debug.append(f'#Подбор исполнения изделия: Нашли блок без длины: FN={check_load}, stroke={candidate.stroke}')
-                        shock_result = self._build_shock_result(variant, candidate, check_load, candidate.stroke, l_block, mounting_length, type_=2)
-                        self.debug.append('#Подбор исполнения изделия: Возвращаем блок без длины. Исполнение {variant} (id={variant.id}) подходит.')
-                        return variant, shock_result, items_for_specification
+                                if self._is_stroke_adjustment_allowed() and self.is_valid_by_stroke_adjustment(
+                                        l_block, self.get_move(), candidate.stroke, l1):
+                                    self.debug.append('Применена регулировка штока для L1.')
+                                    return self._return_result(variant, candidate, fn, candidate.stroke, l_block,
+                                                               mounting_length, type_=1,
+                                                               items_for_specification=items_for_specification)
 
-                    if candidate.l2_min and abs(l_block - candidate.l2_min) <= 5:
-                        self.debug.append(f'Нашли подходящий блок по L2_min: {candidate.l2_min}')
-                        shock_result = self._build_shock_result(variant, candidate, check_load, candidate.stroke, l_block, mounting_length, type_=2)
-                        self.debug.append(f'#Подбор исполнения изделия: Возвращаем блок по L2_min. Исполнение {variant} (id={variant.id}) подходит.')
-                        return variant, shock_result, items_for_specification
+                        else:
+                            if candidate.l and candidate.f:
+                                l_block = candidate.l + candidate.f
+                                self.debug.append(f'Тип 1: L1 = L + F = {candidate.l} + {candidate.f} = {l_block}')
+                                block_type = 1
+                            elif candidate.l2_min:
+                                l_block = candidate.l2_min
+                                self.debug.append(f'Тип 2: l2_min = {l_block}')
+                                block_type = 2
+                            else:
+                                self.debug.append('Нет данных по стандартной длине блока.')
+                                continue
 
-                    if candidate.l2_max and abs(l_block - candidate.l2_max) <= 5:
-                        self.debug.append(f'Нашли подходящий блок по L2_max: {candidate.l2_max}')
-                        shock_result = self._build_shock_result(variant, candidate, check_load, candidate.stroke, l_block, mounting_length, type_=2)
-                        self.debug.append(f'#Подбор исполнения изделия: Возвращаем блок по L2_max. Исполнение {variant} (id={variant.id}) подходит.')
-                        return variant, shock_result, items_for_specification
+                            l_final = l_block + sn_margin / 2
+                            self.debug.append(f'Расчётная длина системы: {l_block} + {sn_margin}/2 = {l_final} мм')
+                            result = self._build_shock_result_and_return(
+                                variant=variant,
+                                candidate=candidate,
+                                check_load=fn,
+                                stroke=candidate.stroke,
+                                l_block=l_block,
+                                block_type=block_type,
+                                items_for_specification=items_for_specification,
+                                sn_margin=sn_margin,
+                            )
+                            if result[0]:
+                                return result
 
-                    l1 = (candidate.l3_min or 0) + (candidate.l4 or 0)
-                    if abs(l_block - l1) <= 5:
-                        self.debug.append(f'Нашли подходящий блок по L1: {l1}')
-                        shock_result = self._build_shock_result(variant, candidate, check_load, candidate.stroke, l_block, mounting_length, type_=1)
-                        self.debug.append(f'#Подбор исполнения изделия: Возвращаем блок по L1. Исполнение {variant} (id={variant.id}) подходит.')
-                        return variant, shock_result, items_for_specification
+            self.debug.append(f'Для FN = {fn} не удалось подобрать блок. Переход к следующей нагрузке.')
 
-                    # Нестандартный подбор через регулировку длины за счёт хода штока
-                    if self.is_valid_by_stroke_adjustment(l_block, self.get_move(), candidate.stroke, l1):
-                        self.debug.append('#Внимание: Применён нестандартный подбор с регулировкой длины за счёт хода штока!')
-                        shock_result = self._build_shock_result(variant, candidate, check_load, candidate.stroke, l_block, mounting_length, type_=1)
-                        self.debug.append(f'#Подбор исполнения изделия: Возвращаем нестандартный блок. Исполнение {variant} (id={variant.id}) подходит.')
-                        return variant, shock_result, items_for_specification
-                else:
-                    if candidate.l3_min is not None and candidate.l4 is not None:
-                        l_block = candidate.l3_min + candidate.l4
-                        self.debug.append(f'Тип 1: стандартная длина блока (L1): {l_block}')
-                        block_type = 1
-                    elif candidate.l2_min is not None:
-                        l_block = candidate.l2_min
-                        self.debug.append(f'Тип 2: стандартная длина блока (L2_min): {l_block}')
-                        block_type = 2
-                    else:
-                        self.debug.append('Не удалось определить стандартную длину блока (нет l3_min/l4 и l2_min).')
-                        continue
-
-                    l_final = l_block + sn_margin / 2
-                    self.debug.append(f'Расчётная длина системы: {l_block} + {sn_margin}/2 = {l_final} мм')
-
-                    shock_result = self._build_shock_result(
-                        variant=variant,
-                        entry=candidate,
-                        fn=check_load,
-                        stroke=candidate.stroke,
-                        l_block=l_block,
-                        mounting_length=mounting_length,
-                        type_=block_type,
-                    )
-                    self.debug.append(f'#Подбор исполнения изделия: Возвращаем стандартный блок. Исполнение {variant} (id={variant.id}) подходит.')
-                    return variant, shock_result, items_for_specification
-
-                self.debug.append(f'Это исполнение не подходит.')
-
-            self.debug.append(f'Не нашли никаких подходящих исполнений для нагрузки {check_load} Н. Перехожу к следующему значению FN.')
-        
         self.debug.append('Не найдено подходящих исполнений для всех вариантов нагрузки.')
-
         return None, None, None
 
     def calculate_mounting_length(self, variant, items_for_specification):
@@ -817,46 +720,72 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
     def is_valid_by_stroke_adjustment(self, l_block, move, stroke, standard_l) -> bool:
         """
-        Проверяет, находится ли фактический диапазон длин (штока) в допустимых пределах с учетом запаса.
+        Проверяет, находится ли фактический диапазон длин (хода штока)
+        в допустимых пределах с учетом запаса.
         """
-        if None in [l_block, move, stroke, standard_l]:
+        # Если данные неполные или регулировка штоком не разрешена, возвращаем False
+        if None in [l_block, move, stroke, standard_l] or not self._is_stroke_adjustment_allowed():
             return False
 
-        reserve_coef = config.SSB_EXTRA_MARGIN_PERCENT
+        reserve_coef = config.SSB_EXTRA_MARGIN_PERCENT  # доля запаса по ходу (например, 0.1 для 10%)
         reserve_mm = stroke * reserve_coef
 
+        # Длины блока в холодном и горячем состоянии системы
         l_cold = l_block
-        l_hot = l_block + move
+        l_hot = l_block + move  # предполагается: положительный move = удлинение, отрицательный = сжатие
 
         l_real_min = min(l_cold, l_hot)
         l_real_max = max(l_cold, l_hot)
 
+        # Допустимые пределы длин с учётом хода и запаса:contentReference[oaicite:8]{index=8}:contentReference[oaicite:9]{index=9}
         l_min = standard_l - stroke / 2 + reserve_mm
         l_max = standard_l + stroke / 2 - reserve_mm
 
         self.debug.append('#Нестандартный подбор: расчет диапазона штока')
-        self.debug.append(f'#Допустимый диапазона: {l_min:.2f} - {l_max:.2f} мм, фактически: {l_real_min:.2f} - {l_real_max:.2f} мм')
+        self.debug.append(
+            f'#Допустимый диапазон: {l_min:.2f} - {l_max:.2f} мм, '
+            f'фактический: {l_real_min:.2f} - {l_real_max:.2f} мм'
+        )
 
+        # Условие валидности: фактические крайние положения должны лежать внутри допустимого диапазона
         return l_real_min >= l_min and l_real_max <= l_max
 
-    def _build_shock_result(self, variant, entry, fn, stroke, l_block, mounting_length, type_):
-        marking = f"{variant.detail_type.designation} {fn:04.0f}.{stroke:03.0f}.0000.{type_}"
+    def _build_shock_result(self, variant, entry, fn, stroke, l_block, mounting_length, type_, l_final):
+        if type_ == 1:
+            l_final = l_block or 0 + mounting_length or 0
+        # Формируем маркировку: SSB <FN>.<Stroke>.<Length>.<Type>
+        marking = (
+            f"{variant.detail_type.designation} "
+            f"{fn:04.0f}.{stroke:03.0f}.{int(l_block):04d}.{type_}"
+        )
+
+        # Рассчитываем длину удлинителя (extender) только для типа 2, для типа 1 он = 0
+        extender_length = 0
+        if type_ == 2:
+            l3 = entry.l3_min or 0
+            l4 = entry.l4 or 0
+            l1 = l3 + l4
+            extender_length = max(0, l_block - l1)
+            self.debug.append(
+                f"Расчёт удлинителя: l_block = {l_block}, L1 = {l1} (L3_min={l3}, L4={l4}), Extender = {extender_length}"
+            )
 
         return {
             'marking': marking,
             'stroke': stroke,
             'type': type_,
-            'extender': max(0, l_block - (entry.l2_min if type_ == 2 else (entry.l3_min + entry.l4))),
+            'extender': extender_length,
             'mounting_length': mounting_length,
-            'l_req': l_block,
+            'l_block': l_block,
             'l1': entry.l1,
             'l2_min': entry.l2_min,
             'l2_max': entry.l2_max,
             'l3_min': entry.l3_min,
             'l3_max': entry.l3_max,
             'l4': entry.l4,
+            'l_final': l_final
         }
-    
+
     def get_parameters(self, available_options: Optional[Dict[str, Any]] = None) -> Tuple[Dict[str, Any], List[str]]:
         """
         Возвращает параметры, необходимые для создания изделия гидроамортизатора.
@@ -870,15 +799,13 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
         if l1 is not None:
             parameters['L1'] = l1
-        
+
         return parameters, []
 
     def get_available_options(self):
         self.debug = []
 
-
         if not self.initialize_selection_params():
-            print(self.debug)
             return {
                 'debug': self.debug,
                 'suitable_variant': None,
@@ -990,3 +917,101 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
         self.debug.append('#Инициализация: входные данные корректны, найдено правило подбора.')
         return True
+
+    def _is_stroke_adjustment_allowed(self) -> bool:
+        """
+        Возвращает True, если регулировка штока разрешена для выбранного семейства изделия.
+        """
+        product_family = self.get_product_family()
+        if product_family is None:
+            self.debug.append("#Регулировка штока: семейство изделия не выбрано.")
+            return False
+
+        result = product_family.has_rod
+        self.debug.append(f"#Регулировка штока разрешена: {result}")
+        return result
+
+    def _return_result(self, variant, candidate, check_load, stroke, l_block, mounting_length, type_,
+                       items_for_specification):
+        """
+        Унифицированный возврат результата подбора.
+        """
+        shock_result = self._build_shock_result(
+            variant=variant,
+            entry=candidate,
+            fn=check_load,
+            stroke=stroke,
+            l_block=l_block,
+            mounting_length=mounting_length,
+            type_=type_
+        )
+        self.debug.append(
+            f'#Подбор исполнения изделия: Возвращаем блок тип {type_}. '
+            f'Исполнение {variant} (id={variant.id}) подходит.'
+        )
+        return variant, shock_result, items_for_specification
+
+    def _build_shock_result_and_return(self, variant, candidate, check_load, stroke, l_block, block_type,
+                                       items_for_specification, sn_margin):
+        """
+        Возвращает результат с расчётом L_final, если монтажная длина не задана.
+        """
+        if sn_margin is None:
+            self.debug.append('Не указано перемещение (Sn). Невозможно рассчитать расчётную длину системы.')
+            return None, None, None
+
+        l_final = l_block + sn_margin / 2
+        self.debug.append(
+            f'Расчётная длина системы (без заданной монтажной длины): '
+            f'L_block + Sn/2 = {l_block} + {sn_margin}/2 = {l_final} мм'
+        )
+
+        shock_result = self._build_shock_result(
+            variant=variant,
+            entry=candidate,
+            fn=check_load,
+            stroke=stroke,
+            l_block=l_block,
+            l_final=l_final,
+            mounting_length=None,
+            type_=block_type
+        )
+
+        self.debug.append(
+            f'#Подбор исполнения изделия: Возвращаем стандартный блок. '
+            f'Исполнение {variant} (id={variant.id}) подходит.'
+        )
+        return variant, shock_result, items_for_specification
+
+    def _get_base_items(self) -> Optional[List[Item]]:
+        """
+        Получает список базовых компонентов изделия: крепления A и B.
+        Используются для расчёта монтажной длины.
+        """
+        base_items = []
+
+        if self.is_clamp_a_required():
+            clamp_a = self.get_pipe_clamp_a()
+            if clamp_a:
+                base_items.append(clamp_a)
+            else:
+                self.debug.append('Крепление A требуется, но не найдено.')
+                return None
+
+        if self.is_clamp_b_required():
+            clamp_b = self.get_pipe_clamp_b()
+            if clamp_b:
+                base_items.append(clamp_b)
+            else:
+                self.debug.append('Крепление B требуется, но не найдено.')
+                return None
+
+        return base_items
+
+    @staticmethod
+    def _group_by(items, key):
+        from collections import defaultdict
+        grouped = defaultdict(list)
+        for item in items:
+            grouped[key(item)].append(item)
+        return grouped

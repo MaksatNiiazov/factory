@@ -247,9 +247,23 @@ class SSBCatalogAdmin(admin.ModelAdmin):
 @admin.register(SSGCatalog)
 class SSGCatalogAdmin(admin.ModelAdmin):
     list_display = (
-        'id', 'fn', 'l_min', 'l_max', 'l1', 'd', 'd1', 'r', 's', 'sw', 'regulation',
+        'id',          # внутренний ID записи
+        'type',        # тип распорки: 1 или 2
+        'fn',          # нагрузка
+        'l_min', 'l_max',  # диапазон длины
+        'l1',          # монтажная длина
+        'd', 'd1',     # ØD и ØD1
+        'r', 's',      # радиус и толщина
+        'h',           # высота (только type=2)
+        'sw', 'sw1', 'sw2',  # ключевые размеры
+        'regulation',  # регулировка
     )
     list_display_links = ('id',)
+    list_filter = ('type',)
+    search_fields = ('fn',)
+
+    def has_view_permission(self, request, obj=None):
+        return True
 
 @admin.register(ClampMaterialCoefficient)
 class ClampMaterialCoefficientAdmin(admin.ModelAdmin):

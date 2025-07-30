@@ -103,4 +103,3 @@ class AttributeUsageChoices(MaxLengthMixin, TextChoices):
     SIZE = 'size', _('Типоразмер')
     RATED_STROKE = 'rated_stroke', _('Номинальный ход')
     INSTALLATION_SIZE = 'installation_size', _('Монтажный размер')
-    PIPE_DIAMETER = 'pipe_diameter', _('Диаметр трубы')

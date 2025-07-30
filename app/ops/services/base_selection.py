@@ -41,21 +41,14 @@ class BaseSelectionAvailableOptions:
 
     def get_pipe_diameter_attribute(self, attributes: List[Attribute]) -> Optional[Attribute]:
         """
-        Возвращает атрибут, который представляет диаметр трубы, основываясь на типе использования или названии.
+        Возвращает атрибут диаметра трубы, если его справочник равен PIPE_DIAMETER.
         """
-        # Наиболее точный способ — usage
         for attr in attributes:
-            if attr.usage == AttributeUsageChoices.PIPE_DIAMETER:
-                self.debug.append(f"#Найден атрибут диаметра по usage=PIPE_DIAMETER: {attr}")
+            if attr.catalog == AttributeCatalog.PIPE_DIAMETER:
+                self.debug.append(f"#Найден атрибут диаметра по catalog=PIPE_DIAMETER: {attr}")
                 return attr
 
-        # Альтернативный способ — по имени
-        for attr in attributes:
-            if attr.name.lower() in ['диаметр', 'наружный_диаметр', 'pipe_diameter', 'diameter']:
-                self.debug.append(f"#Найден атрибут диаметра по имени: {attr.name}")
-                return attr
-
-        self.debug.append(f"#Атрибут диаметра трубы не найден среди атрибутов исполнения.")
+        self.debug.append("#Атрибут диаметра трубы не найден по catalog=PIPE_DIAMETER.")
         return None
 
     def get_load_group_attribute(self, attributes: List[Attribute]) -> Optional[Attribute]:
