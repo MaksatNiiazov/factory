@@ -198,7 +198,6 @@ SWAGGER_SETTINGS = {
     'PERSIST_AUTH': True,
     'DEFAULT_AUTO_SCHEMA_CLASS': 'kernel.api.schema.AutoSchema',
     'DEFAULT_GENERATOR_CLASS': 'kernel.api.generators.SchemaGenerator',
-    'DOC_EXPANSION': 'none',
 }
 
 # django-cors-headers
@@ -264,9 +263,9 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # отключаем проверку кол-ва полей формы, иначе в админке падает если много всего
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000
 
-APP_REDIS_CONNECTION = 'redis://localhost:6379/2'
-
-# Кеширование
+# APP_REDIS_CONNECTION = 'redis://localhost:6379/2'
+#
+# # Кеширование
 # CACHES = {
 #     'default': {
 #         'BACKEND': 'django_redis.cache.RedisCache',
@@ -277,30 +276,30 @@ APP_REDIS_CONNECTION = 'redis://localhost:6379/2'
 #         },
 #     },
 # }
-
-CELERY_BROKER_URL = APP_REDIS_CONNECTION
-CELERY_ACCEPT_CONTENT = ['json']
-CELERY_TASK_IGNORE_RESULT = True
-CELERY_TASK_SERIALIZER = 'json'
-CELERY_EVENT_SERIALIZER = 'json'
-CELERY_WORKER_CONCURRENCY = 5 if not DEBUG else 1
-CELERY_TIMEZONE = TIME_ZONE
-CELERYD_HIJACK_ROOT_LOGGER = False
+#
+# CELERY_BROKER_URL = APP_REDIS_CONNECTION
+# CELERY_ACCEPT_CONTENT = ['json']
+# CELERY_TASK_IGNORE_RESULT = True
+# CELERY_TASK_SERIALIZER = 'json'
+# CELERY_EVENT_SERIALIZER = 'json'
+# CELERY_WORKER_CONCURRENCY = 5 if not DEBUG else 1
+# CELERY_TIMEZONE = TIME_ZONE
+# CELERYD_HIJACK_ROOT_LOGGER = False
 
 
 ASGI_APPLICATION = 'project.asgi.application'
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'CONFIG': {
-            'hosts': [APP_REDIS_CONNECTION],
-            # попытка тюнинга групп/каналов от сообщения
-            # INFO [channels_redis.core:core:731] 1 of 3 channels over capacity in group user-3
-            'expiry': 30,  # default 60
-            'capacity': 666,  # default 100
-        },
-    },
-}
+# CHANNEL_LAYERS = {
+#     'default': {
+#         'BACKEND': 'channels_redis.core.RedisChannelLayer',
+#         'CONFIG': {
+#             'hosts': [APP_REDIS_CONNECTION],
+#             # попытка тюнинга групп/каналов от сообщения
+#             # INFO [channels_redis.core:core:731] 1 of 3 channels over capacity in group user-3
+#             'expiry': 30,  # default 60
+#             'capacity': 666,  # default 100
+#         },
+#     },
+# }
 
 
 CSRF_TRUSTED_ORIGINS = [

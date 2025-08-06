@@ -123,7 +123,7 @@ class BaseSelectionAvailableOptions:
 
         return Variant.objects.get(id=variant_id)
     
-    def get_specification(self, variant: Variant, items) -> List[Dict[str, Any]]:
+    def get_specification(self, variant: Variant, items, remove_empty: bool = False) -> List[Dict[str, Any]]:
         if not variant:
             self.debug.append('#Спецификация: Variant не выбран.')
             return []
@@ -165,6 +165,9 @@ class BaseSelectionAvailableOptions:
                     rows_by_variant[it.variant_id].remove(target_row)
                 if target_row in rows_by_dt.get(it.type_id, []):
                     rows_by_dt[it.type_id].remove(target_row)
+
+        if remove_empty:
+            specification = [row for row in specification if row['item'] is not None]
 
         return specification
     

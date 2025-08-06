@@ -38,3 +38,9 @@ class ComponentGroupType(MaxLengthMixin, TextChoices):
     STUDS = 'studs', _('Список шпилек')
     COUPLING = 'coupling', _('Список муфт')
     SERIES_SELECTABLE = 'series_selectable', _('С выбором серии')
+
+
+class ClampSelectionEntryResult(MaxLengthMixin, TextChoices):
+    UNLIMITED = "unlimited", _("Собирается без ограничений")
+    ADAPTER_REQUIRED = "adapter_required", _("Собирается через переходник")
+    NOT_POSSIBLE = "not_possible", _("Не собирается")

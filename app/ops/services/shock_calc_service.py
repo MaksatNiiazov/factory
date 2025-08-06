@@ -10,6 +10,8 @@ from constance import config
 
 
 def calculate_shock_block(data: dict, user):
+    from catalog.models import ProductFamily
+
     item = get_object_or_404(Item, id=data['item_id'])
     catalog = item.parameters.get(config.SSB_CATALOG_PARAM_KEY, [])
     if not isinstance(catalog, list) or not catalog:
@@ -77,6 +79,7 @@ def calculate_shock_block(data: dict, user):
             if chosen.count() != len(mounting_vars):
                 continue
 
+            # Суммарная длина креплений
             total_mount = 0.0
             for v in chosen:
                 # ⚠️ важно: теперь используем get_available_attributes, чтобы учитывать и базовые атрибуты
@@ -97,6 +100,8 @@ def calculate_shock_block(data: dict, user):
                 total_mount += mount_val or 0.0
 
             L2_req = mounting_length - total_mount
+            debug_msg.append(f"#Расчет: mounting_length={mounting_length}, total_mount={total_mount}, L2_req={L2_req}")
+
             if L2_req < 0:
                 continue
 
@@ -136,3 +141,4 @@ def calculate_shock_block(data: dict, user):
             }
 
     raise ValidationError("Не удалось подобрать гидроамортизатор для заданных параметров.")
+

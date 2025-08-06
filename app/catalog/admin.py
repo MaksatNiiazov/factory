@@ -278,17 +278,36 @@ class ClampSelectionEntryInline(admin.TabularInline):
 
 @admin.register(ClampSelectionMatrix)
 class ClampSelectionMatrixAdmin(admin.ModelAdmin):
-    list_display = ["id", "product_family", "get_detail_types"]
+    list_display = ["id", "product_family", "get_clamp_detail_types", "get_fastener_detail_types"]
     list_display_links = ["id"]
-    filter_horizontal = ["detail_types"]
+    filter_horizontal = ["clamp_detail_types", "fastener_detail_types"]
     autocomplete_fields = ["product_family"]
     inlines = [ClampSelectionEntryInline]
 
-    @admin.display(description=_('Типы деталей/изделии'))
-    def get_detail_types(self, obj):
-        detail_types = list(obj.detail_types.all()[:5])
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.prefetch_related("clamp_detail_types", "fastener_detail_types")
+
+    @admin.display(description=_("Типы деталей/изделий хомутов"))
+    def get_clamp_detail_types(self, obj):
+        """
+        Возвращает строку с названиями типов деталей/изделий хомутов.
+        """
+        clamp_detail_types = list(obj.clamp_detail_types.all()[:5])
+        names = [detail_type.designation for detail_type in clamp_detail_types]
+
+        if obj.clamp_detail_types.count() > 5:
+            return ", ".join(names) + ", ..."
+        return ", ".join(names)
+
+    @admin.display(description=_("Типы деталей/изделий крепежей"))
+    def get_fastener_detail_types(self, obj):
+        """
+        Возвращает строку с названиями типов деталей/изделий крепежей.
+        """
+        detail_types = list(obj.fastener_detail_types.all()[:5])
         names = [detail_type.designation for detail_type in detail_types]
 
-        if obj.detail_types.count() > 5:
-            return ', '.join(names) + ', ...'
-        return ', '.join(names)
+        if obj.fastener_detail_types.count() > 5:
+            return ", ".join(names) + ", ..."
+        return ", ".join(names)

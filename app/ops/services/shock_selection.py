@@ -11,7 +11,7 @@ from catalog.models import (
 
 from ops.api.constants import FN_ON_REQUEST
 from ops.api.serializers import VariantSerializer
-from ops.choices import AttributeUsageChoices
+from ops.choices import AttributeUsageChoices, AttributeCatalog
 from ops.models import Item, BaseComposition, Variant, Attribute
 from ops.services.base_selection import BaseSelectionAvailableOptions
 
@@ -50,6 +50,101 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
         }
         return params
 
+    def get_mounting_length_from_items(self) -> Optional[float]:
+        """
+        Возвращает суммарную монтажную длину по элементам спецификации (без исполнения).
+        """
+        base_items = self._get_base_items()
+        if not base_items:
+            self.debug.append("#get_mounting_length_from_items: Нет базовых элементов для расчёта.")
+            return 0
+
+        mounting_length = 0.0
+        for item in base_items:
+            variant = item.variant
+            if not variant:
+                continue
+            attributes = variant.get_attributes()
+            for attr in attributes:
+                if attr.usage == AttributeUsageChoices.INSTALLATION_SIZE:
+                    value = item.parameters.get(attr.name)
+                    if value:
+                        try:
+                            mounting_length += float(value)
+                        except (TypeError, ValueError):
+                            self.debug.append(
+                                f"#get_mounting_length_from_items: Неверное значение параметра {attr.name} у Item {item.id}")
+        self.debug.append(f"#get_mounting_length_from_items: Расчётная монтажная длина = {mounting_length}")
+        return mounting_length
+
+    def get_catalog_block(self):
+        """
+        Возвращает первый блок, удовлетворяющий условиям:
+        - fn >= заданной нагрузки
+        - stroke >= заданного перемещения (с коэффициентом запаса)
+        """
+        required_load = self.get_load()
+        required_move = self.get_move()
+        installation_length = self.get_installation_length()
+
+        if installation_length is not None:
+            self.debug.append(f"#get_load_and_move: Указана монтажная длина: {installation_length} мм.")
+
+        if required_load is None or required_move is None:
+            self.debug.append("#get_load_and_move: Не заданы нагрузка или перемещение.")
+            return None
+
+        required_stroke = required_move * config.SSB_SN_MARGIN_COEF
+
+        candidates_by_load = SSBCatalog.objects.filter(
+            fn__gte=required_load
+        ).exclude(fn=FN_ON_REQUEST).order_by("fn", "stroke")
+
+        grouped_by_fn = {}
+        for c in candidates_by_load:
+            grouped_by_fn.setdefault(c.fn, []).append(c)
+
+        for fn, group in grouped_by_fn.items():
+            self.debug.append(f"#get_load_and_move: Проверяем группу с нагрузкой FN = {fn}")
+
+            for block in group:
+                if block.stroke < required_stroke:
+                    self.debug.append(
+                        f"#get_load_and_move: Пропущен блок stroke={block.stroke} < требуемого {required_stroke}"
+                    )
+                    continue
+
+                # Временный расчёт монтажной длины без учёта исполнения
+                mounting_length = self.get_mounting_length_from_items() or 0
+                l_cold = installation_length - mounting_length if installation_length is not None else None
+
+                if l_cold is None:
+                    self.debug.append(
+                        f"#get_load_and_move: Не указана installation_length, блок выбран без проверки длины.")
+                    return block
+
+                # Проверка типа 2
+                if block.l2_min and block.l2_max and block.l2_min <= l_cold <= block.l2_max:
+                    self.debug.append(
+                        f"#get_load_and_move: Найден подходящий блок с типом 2: {block.l2_min} ≤ {l_cold} ≤ {block.l2_max}"
+                    )
+                    return block
+
+                # Проверка типа 1
+                if block.l and block.f:
+                    l1 = block.l + block.f
+                    if l_cold <= l1 + 5:
+                        self.debug.append(
+                            f"#get_load_and_move: Найден подходящий блок с типом 1: {l_cold} <= {l1} + 5"
+                        )
+                        return block
+
+            self.debug.append(
+                f"#get_load_and_move: Для FN = {fn} нет подходящего блока по длине. Переход к следующей нагрузке.")
+
+        self.debug.append("#get_load_and_move: Не найдено подходящего блока.")
+        return None
+
     def get_installation_length(self) -> Optional[int]:
         """
         Возвращает значение монтажной длины из параметров.
@@ -68,14 +163,14 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
         """
         Возвращает значение нагрузки с учетом типа нагрузки.
 
-        Метод определяет тип нагрузки и вычисляет значение нагрузки 
-        в зависимости от указанного типа. Если тип нагрузки или 
-        значение нагрузки не указаны, возвращает None и добавляет 
+        Метод определяет тип нагрузки и вычисляет значение нагрузки
+        в зависимости от указанного типа. Если тип нагрузки или
+        значение нагрузки не указаны, возвращает None и добавляет
         соответствующее сообщение в список отладочных сообщений.
 
         Возвращаемое значение:
-            Optional[float]: Значение нагрузки, скорректированное 
-            в зависимости от типа нагрузки, или None, если данные 
+            Optional[float]: Значение нагрузки, скорректированное
+            в зависимости от типа нагрузки, или None, если данные
             некорректны.
 
         Тип нагрузки:
@@ -83,9 +178,9 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
             - 'hs': нагрузка делится на 1.7.
 
         Исключительные случаи:
-            - Если тип нагрузки не указан, добавляется сообщение 
+            - Если тип нагрузки не указан, добавляется сообщение
               "Не указан тип нагрузки." в список отладочных сообщений.
-            - Если значение нагрузки не указано, добавляется сообщение 
+            - Если значение нагрузки не указано, добавляется сообщение
               "Не указан нагрузка." в список отладочных сообщений.
         """
         load_type = self.get_load_type()
@@ -344,6 +439,24 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
         # Получаем диаметр трубы
         pipe_diameter_id = self.params['pipe_params']['pipe_diameter']
         pipe_diameter = PipeDiameter.objects.filter(id=pipe_diameter_id).first()
+        temperature = self.params['pipe_params']['temperature']
+
+        if temperature is not None:
+            materials = Material.objects.filter(min_temp__lte=temperature, max_temp__gte=temperature)
+            material_ids = list(materials.values_list('id', flat=True))
+            self.debug.append(
+                f"#Список креплений A: Найдено {len(material_ids)} материалов подходящих по температуре {temperature}°C"
+            )
+        else:
+            materials = Material.objects.all()
+            material_ids = list(materials.values_list('id', flat=True))
+            self.debug.append(
+                f"#Список креплений A: Температура не задана — будут использоваться все материалы ({len(material_ids)} шт.)"
+            )
+        material_ids = list(materials.values_list('id', flat=True))
+
+        self.debug.append(
+            f"#Список креплений A: Найдено {materials.count()} материалов подходящих по температуре {temperature}°C")
 
         if not pipe_diameter:
             self.debug.append(
@@ -358,11 +471,12 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
         variants = mounting_group_a.variants.all()
         items = Item.objects.filter(variant__in=variants)
+
         found_items = []
 
         for variant in variants:
             self.debug.append(f"#Список креплений A: Проверяю исполнение {variant} (id={variant.id})")
-            attributes = variant.detail_type.get_attributes()
+            attributes = variant.get_attributes()
 
             if not attributes:
                 self.debug.append(f"#Список креплений A: У варианта id={variant.id} нет атрибутов.")
@@ -382,20 +496,31 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
                     continue
 
                 load_value = self.get_load()
-                diameter_id = pipe_diameter.id
+                material_attrs = attributes.filter(catalog=AttributeCatalog.MATERIAL)
 
-                self.debug.append(
-                    f"#Список креплений A: Фильтрация по параметрам: "
-                    f"{load_attribute.name}={load_value}, {pipe_diameter_attribute.name}={diameter_id}"
-                )
+                matching_items = []
 
-                filter_params = {
-                    'variant': variant,
-                    f'parameters__{load_attribute.name}': load_value,
-                    f'parameters__{pipe_diameter_attribute.name}': diameter_id,
-                }
+                for material_attr in material_attrs:
+                    filter_params = {
+                        'variant': variant,
+                        f'parameters__{load_attribute.name}__gte': load_value,
+                        f'parameters__{material_attr.name}__in': material_ids,
+                    }
 
-                matching_items = list(items.filter(**filter_params).values_list('id', flat=True))
+                    if pipe_diameter:
+                        filter_params[f'parameters__{pipe_diameter_attribute.name}'] = pipe_diameter.id
+                        self.debug.append(
+                            f"#Список креплений A: Фильтрация по нагрузке ≥ {load_value}, "
+                            f"диаметру = {pipe_diameter.id}, материалу ({material_attr.name}) ∈ {material_ids}"
+                        )
+                    else:
+                        self.debug.append(
+                            f"#Список креплений A: Фильтрация по нагрузке ≥ {load_value}, "
+                            f"без диаметра, материалу ({material_attr.name})"
+                        )
+
+                    matched = list(items.filter(**filter_params).values_list('id', flat=True))
+                    matching_items.extend(matched)
 
                 self.debug.append(
                     f"#Список креплений A: Найдено {len(matching_items)} хомутов для исполнения {variant}.")
@@ -430,7 +555,7 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
         for variant in variants:
             self.debug.append(f"#Список креплений B: Проверяю исполнение {variant} (id={variant.id})")
-            attributes = variant.detail_type.get_attributes()
+            attributes = variant.get_attributes()
 
             # Найти скобы по нагрузке
             if self.is_bracket(attributes):
@@ -491,14 +616,27 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
                     )
                     return None
 
+                catalog_block = self.get_catalog_block()
+
                 filter_params = {
-                    f'parameters__{load_attribute.name}': check_load,
-                    f'parameters__{rated_stroke_attribute.name}': rated_stroke_value,
+                    f'parameters__{load_attribute.name}__gte': catalog_block.fn,
+                    f'parameters__{rated_stroke_attribute.name}__gte': catalog_block.stroke,
                 }
-
-                item = Item.objects.filter(variant=variant_to_check).filter(**filter_params).first()
-
+                item = (
+                    Item.objects
+                    .filter(variant=variant_to_check)
+                    .filter(**filter_params)
+                    .order_by(
+                        f'parameters__{load_attribute.name}',
+                        f'parameters__{rated_stroke_attribute.name}'
+                    )
+                    .first()
+                )
                 if item:
+                    self.debug.append(
+                        f'#Гидроамортизатор: Найден Item {item.id} для Variant {variant_to_check} '
+                        f'(нагрузка ≥ {check_load}, ход ≥ {rated_stroke_value})'
+                    )
                     return item
 
                 self.debug.append(
@@ -586,15 +724,16 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
         return abs(move) * config.SSB_SN_MARGIN_COEF
 
+    def get_l2(self, l_cold) -> float:
+        move = self.get_move()
+        return l_cold - move / 2
+
     def get_suitable_variant(self):
-        """
-        Выполняет пошаговый подбор подходящего Variant (исполнений) изделия
-        на основе выбранных компонентов.
-        """
         load = self.get_load()
         sn_margin = self.get_sn_margin()
         shock_counts = self.get_shock_counts()
         installation_length = self.get_installation_length()
+        move = self.get_move()
 
         if not load:
             self.debug.append('Не задана пользовательская нагрузка. Поиск исполнения изделия невозможен.')
@@ -607,8 +746,6 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
             return None, None, None
 
         base_items_for_specification = self._get_base_items()
-        if base_items_for_specification is None:
-            return None, None, None
 
         candidates = SSBCatalog.objects.filter(
             fn__gte=load,
@@ -629,6 +766,8 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
                         shock = self.get_shock_item(variant, fn)
                         if not shock:
                             self.debug.append('Не найден амортизатор для варианта.')
+                            self.debug.append(
+                                f'Отказ от блока FN={fn}, Stroke={stroke}, Variant={variant}: амортизатор не найден.')
                             continue
 
                         items_for_specification = copy(base_items_for_specification)
@@ -637,57 +776,94 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
                         mounting_length, errors = self.calculate_mounting_length(variant, items_for_specification)
                         if errors:
                             self.debug.append(f'Ошибка расчета монтажной длины: {errors}')
-                            continue
+                            self.debug.append('Используем монтажную длину = 0 для продолжения подбора.')
+                            mounting_length = 0
+
+                        if not self.params.get('pipe_clamp', {}).get('pipe_clamp_a') and not self.params.get(
+                                'pipe_clamp', {}).get('pipe_clamp_b'):
+                            block_l = installation_length if installation_length else candidate.l + candidate.f
+                            type_ = 2 if candidate.l2_min and candidate.l2_max and candidate.l2_min <= block_l <= candidate.l2_max else 1
+                            self.debug.append(
+                                f"Крепления A и B не заданы — считаем монтажный размер только по {'L4' if type_ == 2 else 'F'} = {candidate.l4 if type_ == 2 else candidate.f}")
+                        else:
+                            self.debug.append(f"Крепления заданы — монтажный размер = {mounting_length}")
+
+                        l = candidate.l or 0
 
                         if installation_length is not None:
-                            l_block = installation_length - mounting_length
+                            l_cold = installation_length
+                            l2 = self.get_l2(l_cold)
                             self.debug.append(
                                 f'L_req = {installation_length}, монтажный размер = {mounting_length}, '
-                                f'L_block = {l_block}'
+                                f'l_cold = {l_cold}'
                             )
 
-                            if candidate.l2_min and candidate.l2_max and candidate.l2_min <= l_block <= candidate.l2_max:
-                                self.debug.append('Подходит тип 2: попадаем в диапазон L2.')
-                                return self._return_result(variant, candidate, fn, candidate.stroke, l_block,
-                                                           mounting_length, type_=2,
-                                                           items_for_specification=items_for_specification)
+                            # Тип 2 — проверка попадания в диапазон L2
+                            if candidate.l2_min and candidate.l2_max and candidate.l2_min <= l_cold <= candidate.l2_max:
+                                l4 = candidate.l4 or 0
+                                self.debug.append(
+                                    f'Подходит тип 2: {candidate.l2_min} ≤ {l_cold} ≤ {candidate.l2_max}')
+                                return self._return_result(
+                                    variant, candidate, fn, candidate.stroke, l_cold,
+                                    mounting_length, l, l2, l4, type_=2,
+                                    items_for_specification=items_for_specification,
+                                )
 
-                            if candidate.l and candidate.f:
-                                l1 = candidate.l + candidate.f
-                                if abs(l_block - l1) <= 5:
-                                    self.debug.append(f'Подходит тип 1: L1 = {l1}, близко к L_block.')
-                                    return self._return_result(variant, candidate, fn, candidate.stroke, l_block,
-                                                               mounting_length, type_=1,
-                                                               items_for_specification=items_for_specification)
+                            # Тип 1 — проверка совпадения с L1
+                            elif candidate.l1:
+                                l1 = candidate.l1
+                                l2 = self.get_l2(l_cold)
+                                l4 = candidate.f or 0
+                                self.debug.append(
+                                    f'Проверка типа 1: L1 = L + F = {candidate.l} + {candidate.f} = {l1}')
+                                if l_cold <= l1 + 5:
+                                    self.debug.append(
+                                        f'Подходит тип 1: {l_cold} ≤ {l1} + 5')
+                                    return self._return_result(
+                                        variant, candidate, fn, candidate.stroke, l_cold,
+                                        mounting_length, l, l2, l4, type_=1,
+                                        items_for_specification=items_for_specification
+                                    )
 
                                 if self._is_stroke_adjustment_allowed() and self.is_valid_by_stroke_adjustment(
-                                        l_block, self.get_move(), candidate.stroke, l1):
-                                    self.debug.append('Применена регулировка штока для L1.')
-                                    return self._return_result(variant, candidate, fn, candidate.stroke, l_block,
-                                                               mounting_length, type_=1,
-                                                               items_for_specification=items_for_specification)
+                                        l_cold, self.get_move(), candidate.stroke, l1
+                                ):
+                                    self.debug.append('Применена регулировка штока — нестандартный подбор')
+                                    return self._return_result(
+                                        variant, candidate, fn, candidate.stroke, l_cold,
+                                        mounting_length, l, l2, l4, type_=1,
+                                        items_for_specification=items_for_specification
+                                    )
+                            self.debug.append('Ни один тип не подошёл по длине. Переход к следующему варианту.')
+                            continue
 
                         else:
                             if candidate.l and candidate.f:
-                                l_block = candidate.l + candidate.f
-                                self.debug.append(f'Тип 1: L1 = L + F = {candidate.l} + {candidate.f} = {l_block}')
+                                l_cold = candidate.l + candidate.f
+                                self.debug.append(f'Тип 1: L1 = L + F = {candidate.l} + {candidate.f} = {l_cold}')
                                 block_type = 1
                             elif candidate.l2_min:
-                                l_block = candidate.l2_min
-                                self.debug.append(f'Тип 2: l2_min = {l_block}')
+                                l_cold = candidate.l2_min
+                                self.debug.append(f'Тип 2: l2_min = {l_cold}')
                                 block_type = 2
                             else:
                                 self.debug.append('Нет данных по стандартной длине блока.')
                                 continue
 
-                            l_final = l_block + sn_margin / 2
-                            self.debug.append(f'Расчётная длина системы: {l_block} + {sn_margin}/2 = {l_final} мм')
+                            l_final = l_cold + sn_margin / 2
+                            l2 = self.get_l2(l_cold)
+
+                            self.debug.append(f'Расчётная длина системы: {l_cold} + {sn_margin}/2 = {l_final} мм')
                             result = self._build_shock_result_and_return(
                                 variant=variant,
                                 candidate=candidate,
                                 check_load=fn,
                                 stroke=candidate.stroke,
-                                l_block=l_block,
+                                l_cold=l_cold,
+                                mounting_length=mounting_length,
+                                l=candidate.l,
+                                l2=l2,
+                                l4=candidate.f if block_type == 1 else candidate.l4,
                                 block_type=block_type,
                                 items_for_specification=items_for_specification,
                                 sn_margin=sn_margin,
@@ -701,73 +877,105 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
         return None, None, None
 
     def calculate_mounting_length(self, variant, items_for_specification):
-        attribute = Attribute.objects.for_variant(variant).filter(
-            usage=AttributeUsageChoices.INSTALLATION_SIZE
-        ).first()
+        mounting_length = 0
 
-        ephemeral_item = Item(
-            type=variant.detail_type,
-            variant=variant,
-            parameters={},
-        )
+        for item in items_for_specification:
+            if item.variant.detail_type.product_family == self.get_product_family():
+                continue
 
-        value, errors = ephemeral_item.calculate_attribute(attribute, children=items_for_specification)
+            attributes = item.variant.get_attributes()
+            for attribute in attributes:
+                if attribute.usage == AttributeUsageChoices.INSTALLATION_SIZE:
+                    value = item.parameters.get(attribute.name)
+                    if value:
+                        mounting_length += float(value)
 
-        if errors:
-            return None, errors
+        return mounting_length, None
 
-        return value, errors
-
-    def is_valid_by_stroke_adjustment(self, l_block, move, stroke, standard_l) -> bool:
+    def is_valid_by_stroke_adjustment(self, l_cold, move, stroke, standard_l) -> bool:
         """
         Проверяет, находится ли фактический диапазон длин (хода штока)
         в допустимых пределах с учетом запаса.
         """
         # Если данные неполные или регулировка штоком не разрешена, возвращаем False
-        if None in [l_block, move, stroke, standard_l] or not self._is_stroke_adjustment_allowed():
+        if None in [l_cold, move, stroke, standard_l] or not self._is_stroke_adjustment_allowed():
+            self.debug.append(
+                "#Нестандартный подбор: не выполнены условия запуска — один из параметров не задан или регулировка запрещена.")
             return False
 
-        reserve_coef = config.SSB_EXTRA_MARGIN_PERCENT  # доля запаса по ходу (например, 0.1 для 10%)
-        reserve_mm = stroke * reserve_coef
+        reserve_coef = config.SSB_EXTRA_MARGIN_PERCENT
+        reserve_mm = float(stroke) * reserve_coef
 
-        # Длины блока в холодном и горячем состоянии системы
-        l_cold = l_block
-        l_hot = l_block + move  # предполагается: положительный move = удлинение, отрицательный = сжатие
+        l_cold = float(l_cold)
+        l_cold = float(l_cold)
+        move = float(move)
 
+        if move < 0:
+            l_hot = l_cold + abs(move)
+        else:
+            l_hot = l_cold - move
         l_real_min = min(l_cold, l_hot)
         l_real_max = max(l_cold, l_hot)
 
-        # Допустимые пределы длин с учётом хода и запаса:contentReference[oaicite:8]{index=8}:contentReference[oaicite:9]{index=9}
-        l_min = standard_l - stroke / 2 + reserve_mm
-        l_max = standard_l + stroke / 2 - reserve_mm
+        l_min = float(standard_l) - float(stroke) / 2 + reserve_mm
+        l_max = float(standard_l) + float(stroke) / 2 - reserve_mm
 
-        self.debug.append('#Нестандартный подбор: расчет диапазона штока')
+        self.debug.append("#Нестандартный подбор: расчёт диапазона штока")
+        self.debug.append(f">> ВХОДНЫЕ ПАРАМЕТРЫ")
+        self.debug.append(f"l_cold: {l_cold}, move: {move}, stroke: {stroke}, standard_l: {standard_l}")
+        self.debug.append(f">> РАСЧЁТ")
+        self.debug.append(f"reserve_mm = stroke * reserve_coef = {stroke} * {reserve_coef} = {reserve_mm:.2f}")
+        self.debug.append(f"l_cold = {l_cold:.2f}")
+
+        # Тут формируем строку в зависимости от знака move
+        if move < 0:
+            self.debug.append(f"l_hot = l_cold + abs(move) = {l_cold:.2f} + {abs(move):.2f} = {l_hot:.2f}")
+        else:
+            self.debug.append(f"l_hot = l_cold - move = {l_cold:.2f} - {move:.2f} = {l_hot:.2f}")
+
+        self.debug.append(f"Фактический диапазон: min={l_real_min:.2f}, max={l_real_max:.2f}")
         self.debug.append(
-            f'#Допустимый диапазон: {l_min:.2f} - {l_max:.2f} мм, '
-            f'фактический: {l_real_min:.2f} - {l_real_max:.2f} мм'
+            f"Допустимый диапазон: min = standard_l - stroke / 2 + reserve_mm = "
+            f"{standard_l} - {stroke}/2 + {reserve_mm:.2f} = {l_min:.2f}"
+        )
+        self.debug.append(
+            f"max = standard_l + stroke / 2 - reserve_mm = "
+            f"{standard_l} + {stroke}/2 - {reserve_mm:.2f} = {l_max:.2f}"
         )
 
-        # Условие валидности: фактические крайние положения должны лежать внутри допустимого диапазона
-        return l_real_min >= l_min and l_real_max <= l_max
+        is_valid = l_real_min >= l_min and l_real_max <= l_max
+        self.debug.append(f">> РЕЗУЛЬТАТ ПРОВЕРКИ: {is_valid}")
+        return is_valid
 
-    def _build_shock_result(self, variant, entry, fn, stroke, l_block, mounting_length, type_, l_final):
-        if type_ == 1:
-            l_final = l_block or 0 + mounting_length or 0
-        # Формируем маркировку: SSB <FN>.<Stroke>.<Length>.<Type>
+    def _build_shock_result(self, variant, entry, fn, stroke, l_cold, mounting_length, l, l2, l4, type_, l_final=None):
+        """
+        Формирует результат подбора изделия.
+        """
+        # Если l_final не передан — считаем его
+        if l_final is None:
+            if type_ == 1:
+                l_final = (l_cold or 0) + (mounting_length or 0)
+                self.debug.append(
+                    f'L_final (тип 1): l_cold + монтажный размер = {l_cold} + {mounting_length} = {l_final}')
+            elif type_ == 2:
+                # Sn уже учтён в l_cold при подборе типа 2 — использовать как есть
+                l_final = (l_cold or 0) + (mounting_length or 0)
+                self.debug.append(
+                    f'L_final (тип 2): l_cold + монтажный размер = {l_cold} + {mounting_length} = {l_final}')
+
+        # Маркировка блока
         marking = (
             f"{variant.detail_type.designation} "
-            f"{fn:04.0f}.{stroke:03.0f}.{int(l_block):04d}.{type_}"
+            f"{fn:04.0f}.{stroke:03.0f}.{int(l_cold):04d}.{type_}"
         )
 
         # Рассчитываем длину удлинителя (extender) только для типа 2, для типа 1 он = 0
         extender_length = 0
         if type_ == 2:
-            l3 = entry.l3_min or 0
             l4 = entry.l4 or 0
-            l1 = l3 + l4
-            extender_length = max(0, l_block - l1)
+            extender_length = l_cold - (l + l4 + mounting_length)
             self.debug.append(
-                f"Расчёт удлинителя: l_block = {l_block}, L1 = {l1} (L3_min={l3}, L4={l4}), Extender = {extender_length}"
+                f"Расчёт удлинителя: {l_cold} - ({l} + {l4} + {mounting_length}) = {extender_length}"
             )
 
         return {
@@ -776,14 +984,15 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
             'type': type_,
             'extender': extender_length,
             'mounting_length': mounting_length,
-            'l_block': l_block,
+            'l_cold': l_cold,
             'l1': entry.l1,
+            'l2': l2,
             'l2_min': entry.l2_min,
             'l2_max': entry.l2_max,
             'l3_min': entry.l3_min,
             'l3_max': entry.l3_max,
             'l4': entry.l4,
-            'l_final': l_final
+            'l_final': l_final,
         }
 
     def get_parameters(self, available_options: Optional[Dict[str, Any]] = None) -> Tuple[Dict[str, Any], List[str]]:
@@ -931,19 +1140,26 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
         self.debug.append(f"#Регулировка штока разрешена: {result}")
         return result
 
-    def _return_result(self, variant, candidate, check_load, stroke, l_block, mounting_length, type_,
+    def _return_result(self, variant, candidate, check_load, stroke, l_cold, mounting_length, l, l2, l4, type_,
                        items_for_specification):
         """
         Унифицированный возврат результата подбора.
         """
+
+        l_final = l_cold + mounting_length
         shock_result = self._build_shock_result(
             variant=variant,
             entry=candidate,
             fn=check_load,
             stroke=stroke,
-            l_block=l_block,
+            l_cold=l_cold,
             mounting_length=mounting_length,
-            type_=type_
+            l=l,
+            l2=l2,
+            l4=l4,
+            type_=type_,
+            l_final=l_final,
+
         )
         self.debug.append(
             f'#Подбор исполнения изделия: Возвращаем блок тип {type_}. '
@@ -951,7 +1167,8 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
         )
         return variant, shock_result, items_for_specification
 
-    def _build_shock_result_and_return(self, variant, candidate, check_load, stroke, l_block, block_type,
+    def _build_shock_result_and_return(self, variant, candidate, check_load, stroke, l_cold, mounting_length, l, l2,
+                                       l4, block_type,
                                        items_for_specification, sn_margin):
         """
         Возвращает результат с расчётом L_final, если монтажная длина не задана.
@@ -960,10 +1177,10 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
             self.debug.append('Не указано перемещение (Sn). Невозможно рассчитать расчётную длину системы.')
             return None, None, None
 
-        l_final = l_block + sn_margin / 2
+        l_final = l_cold + sn_margin / 2 + mounting_length
         self.debug.append(
             f'Расчётная длина системы (без заданной монтажной длины): '
-            f'L_block + Sn/2 = {l_block} + {sn_margin}/2 = {l_final} мм'
+            f'l_cold + Sn/2 = {l_cold} + {sn_margin}/2  + {mounting_length} = {l_final} мм'
         )
 
         shock_result = self._build_shock_result(
@@ -971,7 +1188,10 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
             entry=candidate,
             fn=check_load,
             stroke=stroke,
-            l_block=l_block,
+            l4=l4,
+            l=l,
+            l2=l2,
+            l_cold=l_cold,
             l_final=l_final,
             mounting_length=None,
             type_=block_type
@@ -996,7 +1216,6 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
                 base_items.append(clamp_a)
             else:
                 self.debug.append('Крепление A требуется, но не найдено.')
-                return None
 
         if self.is_clamp_b_required():
             clamp_b = self.get_pipe_clamp_b()
@@ -1004,7 +1223,6 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
                 base_items.append(clamp_b)
             else:
                 self.debug.append('Крепление B требуется, но не найдено.')
-                return None
 
         return base_items
 

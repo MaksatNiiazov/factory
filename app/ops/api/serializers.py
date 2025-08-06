@@ -223,7 +223,7 @@ class DetailTypeSerializer(CleanSerializerMixin, FlexFieldsModelSerializer):
     class Meta:
         model = DetailType
         fields = (
-            'id', 'product_family', 'name', 'designation', 'category', 'variants', 'branch_qty',
+            'id', 'product_family', 'name', 'designation', 'category', 'variants', 'branch_qty', 'technical_requirements',
         )
         extra_kwargs = {
             'variants': {'read_only': True},

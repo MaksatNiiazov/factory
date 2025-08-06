@@ -9,7 +9,7 @@ from pybarker.contrib.modelshistory.models import HistoryModelTracker
 
 from catalog.choices import (
     MaterialType, FieldTypeChoices, Standard, SeriesNameChoices, PipeDirectionChoices,
-    ComponentGroupType,
+    ComponentGroupType, ClampSelectionEntryResult,
 )
 from catalog.managers import ClampMaterialCoefficientManager, PipeDiameterSoftDeleteManager, PipeDiameterAllObjectsManager
 from kernel.mixins import SoftDeleteModelMixin
@@ -552,21 +552,21 @@ class SSGCatalog(models.Model):
     l_max = models.PositiveIntegerField(verbose_name=_('Макс. длина L, мм'), blank=True, null=True)
 
     # Габариты
-    l1 = models.PositiveIntegerField(verbose_name=_('Размер L1, мм'), blank=True, null=True)
-    l2 = models.PositiveIntegerField(verbose_name=_('Размер L2, мм'), blank=True, null=True)
-    d = models.PositiveIntegerField(verbose_name=_('Диаметр D, мм'), blank=True, null=True)
-    d1 = models.PositiveIntegerField(verbose_name=_('Диаметр D1, мм'), blank=True, null=True)
-    r = models.PositiveIntegerField(verbose_name=_('R (радиус/гиб), мм'), blank=True, null=True)
-    s = models.PositiveIntegerField(verbose_name=_('Толщина S, мм'), blank=True, null=True)
-    sw = models.PositiveIntegerField(verbose_name=_('Размер SW (под ключ), мм'), blank=True, null=True)
+    l1 = models.FloatField(verbose_name=_('Размер L1, мм'), blank=True, null=True)
+    l2 = models.FloatField(verbose_name=_('Размер L2, мм'), blank=True, null=True)
+    d = models.FloatField(verbose_name=_('Диаметр D, мм'), blank=True, null=True)
+    d1 = models.FloatField(verbose_name=_('Диаметр D1, мм'), blank=True, null=True)
+    r = models.FloatField(verbose_name=_('R (радиус/гиб), мм'), blank=True, null=True)
+    s = models.FloatField(verbose_name=_('Толщина S, мм'), blank=True, null=True)
+    sw = models.FloatField(verbose_name=_('Размер SW (под ключ), мм'), blank=True, null=True)
 
     # Поля, встречающиеся только у типа 2
-    h = models.PositiveIntegerField(verbose_name=_('Толщина H, мм'), null=True, blank=True)
-    sw1 = models.PositiveIntegerField(verbose_name=_('Размер SW1 (под ключ), мм'), null=True, blank=True)
-    sw2 = models.PositiveIntegerField(verbose_name=_('Размер SW2 (под ключ), мм'), null=True, blank=True)
+    h = models.FloatField(verbose_name=_('Толщина H, мм'), null=True, blank=True)
+    sw1 = models.FloatField(verbose_name=_('Размер SW1 (под ключ), мм'), null=True, blank=True)
+    sw2 = models.FloatField(verbose_name=_('Размер SW2 (под ключ), мм'), null=True, blank=True)
 
     # Дополнительно
-    regulation = models.PositiveIntegerField(verbose_name=_('Регулировка длины, мм'), blank=True, null=True)
+    regulation = models.FloatField(verbose_name=_('Регулировка длины, мм'), blank=True, null=True)
     fixed_part = models.FloatField(verbose_name=_('Фиксированная часть, кг'), null=True, blank=True)
     delta_l = models.FloatField(verbose_name=_('ΔL, кг/м'), null=True, blank=True)
 
@@ -627,41 +627,40 @@ class ClampMaterialCoefficient(CatalogMixin, models.Model):
 
 
 class ClampSelectionMatrix(models.Model):
-    product_family = models.ForeignKey(ProductFamily, on_delete=models.CASCADE, null=True,
-                                       verbose_name=_("Семейство изделий"))
-    detail_types = models.ManyToManyField('ops.DetailType', verbose_name=_("Типы деталей/изедлий"))
+    product_family = models.ForeignKey(
+        ProductFamily, on_delete=models.CASCADE, null=True, verbose_name=_("Семейство изделий"),
+    )
+    clamp_detail_types = models.ManyToManyField(
+        "ops.DetailType", related_name="+", verbose_name=_("Тип деталей/изделий хомутов"),
+    )
+    fastener_detail_types = models.ManyToManyField(
+        "ops.DetailType", related_name="+", verbose_name=_("Типы деталей/изделий крепежа"),
+    )
 
     class Meta:
-        verbose_name = _("Матрица подбора хомутов")
-        verbose_name_plural = _("Матрицы подбора хомутов")
+        verbose_name = _("Таблица собираемости для хомутов")
+        verbose_name_plural = _("Таблицы собираемости для хомутов")
 
     def __str__(self):
-        return f"Матрица для {self.product_family}"
+        return f"Таблица собираемости для {self.product_family}"
 
 
 class ClampSelectionEntry(models.Model):
-    matrix = models.ForeignKey(ClampSelectionMatrix, on_delete=models.CASCADE, related_name='entries',
-                               verbose_name=_("Матрица подбора"))
+    matrix = models.ForeignKey(
+        ClampSelectionMatrix, on_delete=models.CASCADE, related_name="entries", verbose_name=_("Таблица собираемости"),
+    )
     hanger_load_group = models.PositiveIntegerField(verbose_name=_("Нагрузочная группа подвеса"))
     clamp_load_group = models.PositiveIntegerField(verbose_name=_("Нагрузочная группа хомута"))
-    additional_clamp_load_group = models.PositiveIntegerField(null=True, blank=True, verbose_name=_(
-        "Дополнительная нагрузочная группа хомута для переходника"))
-
-    RESULT_CHOICES = (
-        ('unlimited', _("Собирается без ограничений")),
-        ('adapter_required', _("Собирается через переходник")),
-        ('not_possible', _("Не собирается")),
+    result = models.CharField(
+        max_length=ClampSelectionEntryResult.get_max_length(), choices=ClampSelectionEntryResult.choices,
+        verbose_name=_("Результат подбора"),
     )
 
-    result = models.CharField(max_length=20, choices=RESULT_CHOICES, verbose_name=_("Результат подбора"))
-
     class Meta:
-        unique_together = ('matrix', 'hanger_load_group', 'clamp_load_group')
-        verbose_name = _("Запись матрицы подбора")
-        verbose_name_plural = _("Записи матрицы подбора")
+        unique_together = ["matrix", "hanger_load_group", "clamp_load_group"]
+        verbose_name = _("Запись таблицы собираемости")
+        verbose_name_plural = _("Записи таблицы собираемости")
+        ordering = ["matrix", "hanger_load_group", "clamp_load_group"]
 
     def __str__(self):
-        if self.additional_clamp_load_group:
-            return f"{self.hanger_load_group} ({self.clamp_load_group}/{self.additional_clamp_load_group}) - {self.get_result_display()}"
-        else:
-            return f"{self.hanger_load_group} ({self.clamp_load_group}) - {self.get_result_display()}"
+        return f"{self.hanger_load_group} ({self.clamp_load_group}) - {self.get_result_display()}"

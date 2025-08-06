@@ -184,6 +184,7 @@ def get_suitable_loads(
                 'aspect': round(aspect, 1),
                 'up_range': int(round(up_range, 0)),
                 'down_range': int(round(down_range, 0)),
+                'load_initial': round(start_value, 1),
                 'load_minus': round(load_cold, 1),
                 'hot_design_load': round(load_hot, 1),
                 'spring_stiffness': spring_stiffness.value,

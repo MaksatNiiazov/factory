@@ -120,7 +120,7 @@ class MarkingCompiler:
 
     def get_children_context(self, context, children):
         from ops.cache import get_cached_catalog_entry, get_cached_directory_entry
-        from ops.models import Attribute, ItemChild
+        from ops.models import Attribute, ItemChild, Item
         from catalog.models import DirectoryEntry
 
         for child in children:
@@ -128,6 +128,14 @@ class MarkingCompiler:
                 index = child.position
                 count = getattr(child, 'count', 1)
                 child = child.child
+            elif isinstance(child, dict):
+                index = child['position']
+                count = child['count']
+                child = Item.objects.get(id=child['item'])
+            elif isinstance(child, (list, tuple)):
+                index = 1
+                count = child[1]
+                child = child[0]
             else:
                 index = 1
                 count = 1
@@ -171,7 +179,7 @@ class MarkingCompiler:
                 context[prefix].update(params_context)
 
             logger.info('context: %s', context)
-            context[f'{prefix}.{index}'] = context[prefix]
+            context[prefix][index] = context[prefix]
 
     def compile(self):
         from ops.cache import get_cached_catalog_entry, get_cached_directory_entry
