@@ -170,6 +170,12 @@ class ProjectSerializer(CleanSerializerMixin, FlexFieldsModelSerializer):
         }
 
 
+class GetSketchSerializer(serializers.Serializer):
+    format = serializers.ChoiceField(
+        choices=["svg", "pdf"], default="svg", required=False, label=_("Формат файла"),
+    )
+
+
 class CRMProjectItemSerializer(serializers.Serializer):
     id = serializers.IntegerField(required=True, label=_('Идентификатор'))
     product_type = serializers.CharField(required=True)

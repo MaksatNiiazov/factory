@@ -2,7 +2,7 @@ import copy
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional, List, Dict, Any, Tuple
 
-from django.db.models import Q, QuerySet, OuterRef, Exists, Count
+from django.db.models import Q, QuerySet, OuterRef, Exists, Count, Sum
 
 from catalog.choices import ComponentGroupType, Standard
 from catalog.models import (
@@ -116,13 +116,13 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
         support_id = self.params['pipe_params']['support_distance']
 
         if support_distance is not None:
-            return support_distance
+            return int(support_distance)
 
         if support_id is not None:
             support_obj = SupportDistance.objects.filter(id=support_id).first()
 
             if support_obj:
-                return support_obj.id
+                return int(support_obj.value)
 
         return None
 
@@ -284,18 +284,24 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
         - Список ID групп типов креплений к трубе, доступных по текущей конфигурации
         - Признак доступности параметра 'расстояние между опорами' (если пружинных блоков больше одного)
         """
-        branch_qty = self.params['pipe_options']['branch_qty']
+        branch_qty = self.params["pipe_options"]["branch_qty"]
 
         if branch_qty > 1:
             is_support_distance_available = True
         else:
             is_support_distance_available = False
 
+        if is_support_distance_available:
+            available_support_distances = list(self.get_available_support_distances().values_list("id", flat=True))
+        else:
+            available_support_distances = []
+
         pipe_mounting_groups = self.get_pipe_mounting_groups()
 
         return {
-            'pipe_mounting_groups': list(pipe_mounting_groups.values_list('id', flat=True)),
-            'is_support_distance_available': is_support_distance_available,
+            "pipe_mounting_groups": list(pipe_mounting_groups.values_list("id", flat=True)),
+            "is_support_distance_available": is_support_distance_available,
+            "support_distances": available_support_distances,
         }
 
     def get_pipe_mount_item(self) -> Tuple[Optional[Item], Optional[Item]]:
@@ -314,14 +320,28 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
             hanger_load_group_ids = self.get_load_group_ids_by_lgv()
 
             entry = ClampSelectionEntry.objects.filter(
-                matrix__product_family=self.get_selected_product_family(),
+                matrix__product_families=self.get_selected_product_family(),
                 matrix__clamp_detail_types=pipe_mount.variant.detail_type,
                 hanger_load_group=self.get_lgv(),
                 clamp_load_group=load_group_lgv,
             ).first()
 
             if not entry:
-                return pipe_mount, None
+                fastener_component_group = ComponentGroup.objects.filter(
+                    group_type=ComponentGroupType.FASTENER,
+                ).first()
+
+                if not fastener_component_group:
+                    self.debug.append(
+                        f"Невозможно получить крепление к трубе, так как не создан ComponentGroup.FASTENER",
+                    )
+                    return None, None
+
+                zom = Item.objects.filter(
+                    type_id__in=fastener_component_group.detail_types.values_list("id", flat=True),
+                    parameters__LGV=load_group_id,
+                ).first()
+                return pipe_mount, zom
 
             if entry.result == "unlimited":
                 zom = Item.objects.filter(
@@ -419,6 +439,10 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
             return [2]
 
         return []
+
+    def get_available_support_distances(self):
+        support_distances = SupportDistance.objects.all()
+        return support_distances
 
     def get_lgv(self):
         selected_spring = self.get_selected_spring_block()
@@ -690,16 +714,17 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
         lgv = self.get_lgv()
 
         matrix = ClampSelectionMatrix.objects.filter(
-            product_family=self.get_selected_product_family(),
+            product_families=self.get_selected_product_family(),
             clamp_detail_types=variant.detail_type,
         ).prefetch_related('entries').first()
 
         if not matrix:
             self.debug.append(
-                f'Не найдено матрица выбора хомутов для хомута {variant.detail_type}. Возвращаю только хомуты с '
+                f'Не найдено матрица выбора хомутов для хомута {variant.detail_type}. Будут хомуты с '
                 f'LGV={lgv}',
             )
             filter_params[f'parameters__{load_group_attribute.name}__in'] = load_group_ids
+            self.debug.append(f'#Выбор крепления к трубе: Фильтрую по параметрам: {filter_params}')
             found_items = pipe_clamps.filter(**filter_params)
             return list(found_items.values_list('id', flat=True))
 
@@ -1169,6 +1194,246 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
         return variants
 
+    def get_stud_items(self, base_composition, ascending: bool = True):
+        base_child = base_composition.base_child
+        base_child_variant = base_composition.base_child_variant
+
+        if base_child_variant:
+            attributes = base_child_variant.get_attributes()
+        else:
+            attributes = base_child.get_attributes()
+
+        attr = self.get_attribute_by_usage(attributes, AttributeUsageChoices.LENGTH)
+        if not attr:
+            return None, []
+
+        attr_name = attr.name
+
+        ordering = f"parameters__{attr_name}" if ascending else f"-parameters__{attr_name}"
+
+        item_qs = Item.objects.filter(
+            Q(type=base_child) | Q(variant=base_child_variant) if base_child_variant else Q(type=base_child)
+        ).exclude(
+            parameters__isnull=True
+        ).exclude(
+            **{f'parameters__{attr_name}__isnull': True}
+        ).order_by(ordering)
+
+        return attr_name, item_qs
+
+    def get_coupling_items(self, base_composition):
+        base_child = base_composition.base_child
+        base_child_variant = base_composition.base_child_variant
+
+        if base_child_variant:
+            attributes = base_child_variant.get_attributes()
+        else:
+            attributes = base_child.get_attributes()
+
+        attr = self.get_attribute_by_usage(attributes, AttributeUsageChoices.LOAD_GROUP)
+
+        if not attr:
+            return None, []
+
+        attr_name = attr.name
+        item_qs = Item.objects.filter(
+            Q(type=base_child) | Q(variant=base_child_variant) if base_child_variant else Q(type=base_child)
+        ).exclude(parameters__isnull=True).exclude(**{f'parameters__{attr_name}__isnull': True})
+
+        return attr_name, item_qs
+
+    def find_one_stud(self, base_compositions, rest_system_height):
+        self.debug.append(f"#Поиск шпилька: В базовом составе 1 шпилька, ищем только одну шпильку.")
+        base_composition = base_compositions[0]
+        attr_name, items_qs = self.get_stud_items(base_composition)
+
+        if not attr_name:
+            self.debug.append(
+                f'#Поиск шпилька: Базовый состав={base_composition} не имеет атрибута usage=LENGTH. Пропускаю',
+            )
+            return None
+
+        filter_params = {f"parameters__{attr_name}": rest_system_height}
+
+        items = items_qs.filter(**filter_params)
+
+        if items.exists():
+            first_item = items.first()
+            self.debug.append(f"Найдено подходящая шпилька: {first_item} (id={first_item.id})")
+            return first_item
+
+        self.debug.append(
+            f"Не смогли найти подходящую шпильку по параметру {attr_name}={rest_system_height}. Пропускаем."
+        )
+        return None
+
+    def find_two_studs(self, variant, base_compositions, rest_system_height):
+        self.debug.append('#Поиск шпилька: В базовом составе 2 шпильки, ищем пару шпилек.')
+        comp1, comp2 = base_compositions
+
+        attr1, items1 = self.get_stud_items(comp1)
+        attr2, items2 = self.get_stud_items(comp2)
+
+        for it1 in items1:
+            val1 = it1.parameters.get(attr1)
+            if not isinstance(val1, (int, float)):
+                continue
+            for it2 in items2:
+                val2 = it2.parameters.get(attr2)
+                if not isinstance(val2, (int, float)):
+                    continue
+
+                val1 = int(val1)
+                val2 = int(val2)
+
+                if val1 + val2 == rest_system_height:
+                    self.debug.append(f"Найдены подходящие шпильки: {it1} (id={it1.id}), {it2} (id={it2.id})")
+
+                    # Теперь надо искать одну муфту
+                    coupling_component_group = ComponentGroup.objects.filter(
+                        group_type=ComponentGroupType.COUPLING,
+                    ).first()
+
+                    if not coupling_component_group:
+                        self.debug.append(f"#Поиск шпилька: Но не нашли список муфт в ComponentGroup.")
+                        continue
+
+                    coupling_detail_types = coupling_component_group.detail_types.all()
+
+                    base_compositions = BaseComposition.objects.filter(
+                        base_parent_variant=variant,
+                        base_child__in=coupling_detail_types,
+                    )
+                    total = base_compositions.aggregate(total_count=Sum("count"))["total_count"] or 0
+
+                    if total != 1:
+                        self.debug.append(f"#Поиск шпилька: В базовом составе количество муфт не равно 1.")
+                        continue
+
+                    coupling_comp = base_compositions.first()
+                    attr_name, coupling_items = self.get_coupling_items(coupling_comp)
+                    self.debug.append(f"Всего муфт: {coupling_items.count()}")
+
+                    filter_params = {
+                        f"parameters__{attr_name}__in": self.get_load_group_ids_by_lgv(),
+                    }
+                    coupling_items = coupling_items.filter(**filter_params)
+                    self.debug.append(f"Фильтруем муфты по параметрам: {filter_params}")
+
+                    if coupling_items.exists():
+                        coupling_item = coupling_items.first()
+                        self.debug.append(
+                            f"Поиск шпилька: Найден один подходящая муфта: {coupling_item} (id={coupling_item.id})"
+                        )
+                        return it1, it2, coupling_item
+
+        self.debug.append(
+            f"Не смогли найти подходящие шпильки по параметрам {attr1} и {attr2} для высоты {rest_system_height}. "
+            f"Пропускаем."
+        )
+        return None, None, None
+
+    def find_three_studs(self, variant, base_compositions, rest_system_height):
+        self.debug.append(
+            '#Поиск шпилька: В базовом составе 3 шпильки. Условие: 2 шпильки одинаковой длины, '
+            'третья шпилька минимальной длины, сумма всех трех шпилек равна высоте системы.'
+        )
+        comp1, comp2, comp3 = base_compositions
+
+        attr1, items1 = self.get_stud_items(comp1, ascending=False)
+        attr2, items2 = self.get_stud_items(comp2, ascending=False)
+        attr3, items3 = self.get_stud_items(comp3)
+
+        for it1 in items1:
+            val1 = it1.parameters.get(attr1)
+            if not isinstance(val1, (int, float)):
+                continue
+
+            for it2 in items2:
+                val2 = it2.parameters.get(attr2)
+
+                if not isinstance(val2, (int, float)):
+                    continue
+
+                val1 = int(val1)
+                val2 = int(val2)
+
+                # Проверяем, что две шпильки одинаковой длины
+                if val2 != val1:
+                    continue
+
+                for it3 in items3:
+                    val3 = it3.parameters.get(attr3)
+                    if not isinstance(val3, (int, float)):
+                        continue
+
+                    val3 = int(val3)
+
+                    # Проверяем, что третья шпилька минимальной длины
+                    if val3 > val1:
+                        continue
+
+                    total_length = val1 + val2 + val3
+                    if total_length == rest_system_height:
+                        self.debug.append(
+                            f"Найдены подходящие шпильки: {it1} (id={it1.id}), {it2} (id={it2.id}), "
+                            f"{it3} (id={it3.id})"
+                        )
+
+                        # Теперь надо искать двух муфт
+                        coupling_component_group = ComponentGroup.objects.filter(
+                            group_type=ComponentGroupType.COUPLING,
+                        ).first()
+
+                        if not coupling_component_group:
+                            self.debug.append(f"#Поиск шпилька: Но не нашли список муфт в ComponentGroup.")
+                            continue
+
+                        coupling_detail_types = coupling_component_group.detail_types.all()
+
+                        base_compositions = BaseComposition.objects.filter(
+                            base_parent_variant=variant,
+                            base_child__in=coupling_detail_types,
+                        )
+                        total = base_compositions.aggregate(total_count=Sum("count"))["total_count"] or 0
+
+                        if total != 2:
+                            self.debug.append(f"#Поиск шпилька: В базовом составе количество муфт не равно 2.")
+                            continue
+
+                        if len(base_compositions) == 1:
+                            coupling_comp1 = coupling_comp2 = base_compositions[0]
+                        else:
+                            coupling_comp1, coupling_comp2 = base_compositions
+
+                        attr1, coupling_items1 = self.get_coupling_items(coupling_comp1)
+                        attr2, coupling_items2 = self.get_coupling_items(coupling_comp2)
+
+                        filter_params1 = {
+                            f"parameters__{attr1}__in": self.get_load_group_ids_by_lgv(),
+                        }
+                        coupling_items1 = coupling_items1.filter(**filter_params1)
+
+                        filter_params2 = {
+                            f"parameters__{attr2}__in": self.get_load_group_ids_by_lgv(),
+                        }
+                        coupling_items2 = coupling_items2.filter(**filter_params2)
+
+                        if coupling_items1.exists() and coupling_items2.exists():
+                            coupling_item1 = coupling_items1.first()
+                            coupling_item2 = coupling_items2.first()
+                            self.debug.append(
+                                f"Поиск шпилька: Найдены две подходящие муфты: {coupling_item1} (id={coupling_item1.id}), "
+                                f"{coupling_item2} (id={coupling_item2.id})"
+                            )
+                            return it1, it2, it3, coupling_item1, coupling_item2
+
+        self.debug.append(
+            f"Не смогли найти подходящие шпильки по параметрам {attr1}, {attr2} и {attr3} для высоты {rest_system_height}. "
+            f"Пропускаем."
+        )
+        return None, None, None, None, None
+
     def get_suitable_variant(self) -> Tuple[Optional[Variant], Optional[float], Optional[List]]:
         """
         Выполняет пошаговый подбор подходящих Variant (исполнений) изделия
@@ -1205,6 +1470,11 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
             return None, None, None
 
         pipe_mount_item, zom = self.get_pipe_mount_item()
+
+        if not pipe_mount_item:
+            self.debug.append(f"Поиск DetailType: Не найдено подходящее крепление к трубе (id={pipe_mount}).")
+            return None, None, None
+
         items_for_specification.append(pipe_mount_item)
 
         variants = self.filter_suitable_variants_via_child(variants, pipe_mount_item)
@@ -1273,6 +1543,9 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
                 self.debug.append(f'Не удалось вычислить, ошибки: {errors}. Пропускаю исполнение.')
                 continue
 
+            if current_system_height is not None:
+                current_system_height = int(Decimal(str(current_system_height)).to_integral_value(rounding=ROUND_HALF_UP))
+
             self.debug.append(f'Вычисленная системная высота без шпилек: {current_system_height}')
 
             base_compositions = BaseComposition.objects.filter(
@@ -1285,7 +1558,7 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
             if desired_system_height:
                 rest_system_height = float(Decimal(str(desired_system_height)) - Decimal(str(current_system_height)))
-                rest_system_height = float(Decimal(str(rest_system_height)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+                rest_system_height = int(Decimal(str(rest_system_height)).to_integral_value(rounding=ROUND_HALF_UP))
                 self.debug.append(f'Системная высота которую нужно заполнить: {rest_system_height}')
 
                 if rest_system_height == 0:
@@ -1300,137 +1573,40 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
                 self.debug.append(f'#Поиск шпилька: Количество шпилек в базовом составе: {total}')
                 if total == 1:
-                    self.debug.append('#Поиск шпилька: В базовом составе 1 шпилька, ищем только одну шпильку.')
-                    base_composition = base_compositions[0]
-                    base_child = base_composition.base_child
-                    base_child_variant = base_composition.base_child_variant
+                    stud_item = self.find_one_stud(base_compositions, rest_system_height)
 
-                    if base_child_variant:
-                        attributes = base_child_variant.get_attributes()
-                    else:
-                        attributes = base_child.get_attributes()
-
-                    attr = self.get_attribute_by_usage(attributes, usage=AttributeUsageChoices.LENGTH)
-                    if not attr:
-                        self.debug.append(
-                            f'#Поиск шпилька: Базовый состав={base_composition} не имеет атрибута usage=LENGTH. Пропускаю',
-                        )
-                        continue
-
-                    attr_name = attr.name
-
-                    # Фильтруем Items, где в JSON поле parameters[attr_name] >= needed_length
-                    query_param = {f'parameters__{attr_name}': rest_system_height}
-                    items = Item.objects.filter(
-                        Q(type=base_child) | Q(variant=base_child_variant) if base_child_variant else Q(type=base_child)
-                    ).filter(**query_param)
-
-                    if items.exists():
-                        first_item = items.first()
-                        items_for_specification.append(first_item)
-                        item_system_height = first_item.parameters[attr_name]
+                    if stud_item:
+                        items_for_specification.append(stud_item)
                         self.debug.append(f'Найдено подходящее исполнение с одной шпилькой. Поиск завершен.')
                         found = True
                     else:
-                        self.debug.append(f'Не смогли найти подходящую шпильку по параметру {attr_name}={rest_system_height}. Пропускаем.')
+                        continue
                 elif total == 2:
-                    self.debug.append('#Поиск шпилька: В базовом составе 2 шпильки, ищем пару шпилек.')
-                    comp1, comp2 = base_compositions
+                    stud_item1, stud_item2, coupling_item = self.find_two_studs(variant, base_compositions, rest_system_height)
 
-                    def get_items_and_attr_name(comp):
-                        base_child = comp.base_child
-                        base_child_variant = comp.base_child_variant
-
-                        if base_child_variant:
-                            attributes = base_child_variant.get_attributes()
-                        else:
-                            attributes = base_child.get_attributes()
-
-                        attr = self.get_attribute_by_usage(attributes, AttributeUsageChoices.LENGTH)
-                        if not attr:
-                            return None, []
-
-                        attr_name = attr.name
-                        item_qs = Item.objects.filter(
-                            Q(type=base_child) | Q(variant=base_child_variant) if base_child_variant else Q(type=base_child)
-                        ).exclude(parameters__isnull=True).exclude(**{f'parameters__{attr_name}__isnull': True})
-
-                        return attr_name, list(item_qs)
-
-                    attr1, items1 = get_items_and_attr_name(comp1)
-                    attr2, items2 = get_items_and_attr_name(comp2)
-
-                    for it1 in items1:
-                        val1 = it1.parameters.get(attr1)
-                        if not isinstance(val1, (int, float)):
-                            continue
-                        for it2 in items2:
-                            val2 = it2.parameters.get(attr2)
-                            if not isinstance(val2, (int, float)):
-                                continue
-                            if val1 + val2 == rest_system_height:
-                                items_for_specification.append(it1)
-                                items_for_specification.append(it2)
-                                self.debug.append(f'Найдено подходящее исполнение с двумя шпилькой. Поиск завершен.')
-                                found = True
-                                break
-
-                    if not found:
-                        self.debug.append(f'Не смогли найти подходящую пару шпилек по параметрам {attr1} и {attr2}. Пропускаем.')
+                    if stud_item1 and stud_item2 and coupling_item:
+                        items_for_specification.append(stud_item1)
+                        items_for_specification.append(stud_item2)
+                        items_for_specification.append(coupling_item)
+                        self.debug.append(f'Найдено подходящее исполнение с двумя шпильками. Поиск завершен.')
+                        found = True
+                    else:
+                        continue
                 elif total == 3:
-                    self.debug.append('#Поиск шпилька: В базовом составе 3 шпильки, ищем тройку шпилек. Две из них должны быть одинаковой длины.')
-                    comp1, comp2, comp3 = base_compositions
+                    stud_item1, stud_item2, stud_item3, coupling_item1, coupling_item2 = self.find_three_studs(
+                        variant, base_compositions, rest_system_height,
+                    )
 
-                    def get_items_and_attr_name(comp):
-                        base_child = comp.base_child
-                        base_child_variant = comp.base_child_variant
-
-                        if base_child_variant:
-                            attributes = base_child_variant.get_attributes()
-                        else:
-                            attributes = base_child.get_attributes()
-
-                        attr = self.get_attribute_by_usage(attributes, AttributeUsageChoices.LENGTH)
-                        if not attr:
-                            return None, []
-
-                        attr_name = attr.name
-                        item_qs = Item.objects.filter(
-                            Q(type=base_child) | Q(variant=base_child_variant) if base_child_variant else Q(type=base_child)
-                        ).exclude(parameters__isnull=True).exclude(**{f'parameters__{attr_name}__isnull': True})
-
-                        return attr_name, list(item_qs)
-
-                    attr1, items1 = get_items_and_attr_name(comp1)
-                    attr2, items2 = get_items_and_attr_name(comp2)
-                    attr3, items3 = get_items_and_attr_name(comp3)
-
-                    for it1 in items1:
-                        val1 = it1.parameters.get(attr1)
-                        if not isinstance(val1, (int, float)):
-                            continue
-
-                        for it2 in items2:
-                            val2 = it2.parameters.get(attr2)
-                            if not isinstance(val2, (int, float)) or val2 != val1:
-                                continue
-
-                            for it3 in items3:
-                                val3 = it3.parameters.get(attr3)
-                                if not isinstance(val3, (int, float)):
-                                    continue
-
-                                total_length = val1 + val2 + val3
-                                if total_length == rest_system_height:
-                                    items_for_specification.append(it1)
-                                    items_for_specification.append(it2)
-                                    items_for_specification.append(it3)
-                                    self.debug.append(f'Найдено подходящее исполнение с тремя шпилькой. Поиск завершен.')
-                                    found = True
-                                    break
-
-                    if not found:
-                        self.debug.append(f'Не смогли найти подходящую тройку шпилек по параметрам {attr1}, {attr2} и {attr3}. Пропускаем.')
+                    if stud_item1 and stud_item2 and stud_item3 and coupling_item1 and coupling_item2:
+                        items_for_specification.append(stud_item1)
+                        items_for_specification.append(stud_item2)
+                        items_for_specification.append(stud_item3)
+                        items_for_specification.append(coupling_item1)
+                        items_for_specification.append(coupling_item2)
+                        self.debug.append(f'Найдено подходящее исполнение с тремя шпильками. Поиск завершен.')
+                        found = True
+                    else:
+                        continue
             else:
                 self.debug.append(
                     'Пользователь не указал желаемую системную высоту, возвращаем шпилку минимальной высоты.'
@@ -1496,6 +1672,12 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
             if errors:
                 self.debug.append(f'Не удалось вычислить, ошибки: {errors}. Пропускаю исполнение.')
                 continue
+
+            # TODO: Нужно подумать, чтобы округлять не прямо в коде, а чтобы при вычислении атрибута
+            if calculated_system_height is not None:
+                calculated_system_height = int(
+                    Decimal(str(calculated_system_height)).to_integral_value(rounding=ROUND_HALF_UP)
+                )
 
             self.debug.append(f'Вычисленная системная высота: {calculated_system_height}')
 

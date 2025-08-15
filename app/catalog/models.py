@@ -627,8 +627,8 @@ class ClampMaterialCoefficient(CatalogMixin, models.Model):
 
 
 class ClampSelectionMatrix(models.Model):
-    product_family = models.ForeignKey(
-        ProductFamily, on_delete=models.CASCADE, null=True, verbose_name=_("Семейство изделий"),
+    product_families = models.ManyToManyField(
+        ProductFamily, related_name="+", verbose_name=_("Семейства изделий"),
     )
     clamp_detail_types = models.ManyToManyField(
         "ops.DetailType", related_name="+", verbose_name=_("Тип деталей/изделий хомутов"),
@@ -642,7 +642,7 @@ class ClampSelectionMatrix(models.Model):
         verbose_name_plural = _("Таблицы собираемости для хомутов")
 
     def __str__(self):
-        return f"Таблица собираемости для {self.product_family}"
+        return f"Таблица собираемости для {', '.join(str(family) for family in self.product_families.all())}"
 
 
 class ClampSelectionEntry(models.Model):

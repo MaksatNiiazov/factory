@@ -2,8 +2,8 @@ from collections import defaultdict
 from copy import copy
 from typing import Optional, Dict, Any, List
 
-from catalog.models import SSGCatalog, PipeDiameter, SupportDistance, PipeMountingGroup, PipeMountingRule, Material, \
-    ComponentGroup
+from catalog.models import SSGCatalog, PipeDiameter, SupportDistance, PipeMountingGroup, PipeMountingRule, Material
+from ops.api.serializers import VariantSerializer
 from ops.models import Item, Variant, BaseComposition
 from ops.choices import AttributeUsageChoices
 from ops.services.base_selection import BaseSelectionAvailableOptions
@@ -45,10 +45,68 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
         }
         return params
 
+    def get_catalog_block(self):
+        """
+        Возвращает первый блок, удовлетворяющий условиям:
+        - fn >= заданной нагрузки
+        """
+        required_load = self.get_load()
+        installation_length = self.get_installation_length()
+
+        if required_load is None:
+            self.debug.append("#get_load_and_move: Не задана нагрузка.")
+            return None
+
+        if installation_length is not None:
+            self.debug.append(f"#get_load_and_move: Указана монтажная длина: {installation_length} мм.")
+
+        # считаем монтажную длину как в амортизаторах: сумма INSTALLATION_SIZE у выбранных A/B
+        mounting_length = self.get_mounting_length_from_items() or 0.0
+        l_cold = (installation_length - mounting_length) if installation_length is not None else None
+
+        candidates_by_load = (
+            SSGCatalog.objects
+            .filter(fn__gte=required_load)
+            .order_by("fn")
+        )
+
+        grouped_by_fn = {}
+        for c in candidates_by_load:
+            grouped_by_fn.setdefault(c.fn, []).append(c)
+
+        for fn, group in grouped_by_fn.items():
+            self.debug.append(f"#get_load_and_move: Проверяем группу с нагрузкой FN = {fn}")
+
+            for block_type in (1, 2):
+                blocks = [b for b in group if b.type == block_type]
+                blocks.sort(key=lambda b: (b.l_min or 0))
+
+                for block in blocks:
+                    # если L установки не задана — берём первый подходящий по FN
+                    if l_cold is None:
+                        self.debug.append("#get_load_and_move: installation_length не задан — возвращаем первый по FN.")
+                        return block
+
+                    if block_type == 1:
+                        l1 = block.l1
+                        if l1 is not None and l_cold <= l1 + 5:
+                            self.debug.append(f"#get_load_and_move: Тип 1 подходит: {l_cold} ≤ {l1} + 5")
+                            return block
+                    else:
+                        if block.l_min is not None and block.l_max is not None and block.l_min <= l_cold <= block.l_max:
+                            self.debug.append(
+                                f"#get_load_and_move: Тип 2 подходит: {block.l_min} ≤ {l_cold} ≤ {block.l_max}")
+                            return block
+
+            self.debug.append(f"#get_load_and_move: Для FN = {fn} по длине не подошло. Идём к следующей нагрузке.")
+
+        self.debug.append("#get_load_and_move: Ничего не нашли.")
+        return None
+
     def get_installation_length(self) -> Optional[int]:
         return self.params.get("load_and_move", {}).get("installation_length")
 
-    def get_mounting_length(self) -> int:
+    def get_mounting_length(self) -> float:
         """
         Возвращает суммарную монтажную длину по элементам спецификации (без исполнения).
         """
@@ -62,16 +120,15 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
             variant = item.variant
             if not variant:
                 continue
-            attributes = variant.get_attributes()
-            for attr in attributes:
-                if attr.usage == AttributeUsageChoices.INSTALLATION_SIZE:
-                    value = item.parameters.get(attr.name)
-                    if value:
-                        try:
-                            mounting_length += float(value)
-                        except (TypeError, ValueError):
-                            self.debug.append(
-                                f"#get_mounting_length_from_items: Неверное значение параметра {attr.name} у Item {item.id}")
+            for attr in variant.get_attributes().filter(usage=AttributeUsageChoices.INSTALLATION_SIZE):
+                value = item.parameters.get(attr.name)
+                if value:
+                    try:
+                        mounting_length += float(value)
+                    except (TypeError, ValueError):
+                        self.debug.append(
+                            f"#get_mounting_length_from_items: Неверное значение параметра {attr.name} у Item {item.id}"
+                        )
         self.debug.append(f"#get_mounting_length_from_items: Расчётная монтажная длина = {mounting_length}")
         return mounting_length
 
@@ -164,7 +221,7 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
             items = Item.objects.filter(
                 variant=variant,
                 **{
-                    f"parameters__{load_attr.name}": load,
+                    f"parameters__{load_attr.name}__gte": load,
                     f"parameters__{diam_attr.name}": pipe_diameter.id
                 }
             ).values_list("id", flat=True)
@@ -186,7 +243,7 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
                 continue
             items = Item.objects.filter(
                 variant=variant,
-                **{f"parameters__{load_attr.name}__lte": load}
+                **{f"parameters__{load_attr.name}__gte": load}
             ).values_list("id", flat=True)
             result.extend(items)
         return list(result)
@@ -295,74 +352,61 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
                 f"mounting_length = {mounting_length}, l_required = {l_required}"
             )
 
-            for block_type in [1, 2]:
-                candidates = SSGCatalog.objects.filter(
-                    fn__gte=load,
-                    type=block_type
-                ).order_by("fn", "l_min")
+            fns = (
+                SSGCatalog.objects
+                .filter(fn__gte=load)
+                .exclude(fn=None)
+                .order_by("fn")
+                .values_list("fn", flat=True)
+                .distinct()
+            )
 
-                for entry in candidates:
-                    if entry.l_min is not None and entry.l_max is not None:
-                        self.debug.append(
-                            f"#get_suitable_entry: Проверка блока type={block_type}, ID={entry.id}: {entry.l_min} ≤ {l_required} ≤ {entry.l_max}"
-                        )
-                        if entry.l_min <= l_required <= entry.l_max:
-                            self.debug.append(f"#get_suitable_entry: Подходит блок ID={entry.id}, type={block_type}")
-                            return entry
-                    else:
-                        self.debug.append(f"#get_suitable_entry: У блока ID={entry.id} отсутствуют l_min/l_max")
+            for fn in fns:
+                self.debug.append(f"#get_suitable_entry: Проверяем FN = {fn}")
+                for block_type in (1, 2):
+                    candidates = (
+                        SSGCatalog.objects
+                        .filter(fn=fn, type=block_type)
+                        .order_by("l_min")
+                    )
+                    for entry in candidates:
+                        if entry.l_min is not None and entry.l_max is not None:
+                            self.debug.append(
+                                f"#get_suitable_entry: Проверка блока FN={fn}, type={block_type}, ID={entry.id}: "
+                                f"{entry.l_min} ≤ {l_required} ≤ {entry.l_max}"
+                            )
+                            if entry.l_min <= l_required <= entry.l_max:
+                                self.debug.append(
+                                    f"#get_suitable_entry: Подходит блок ID={entry.id}, FN={fn}, type={block_type}")
+                                return entry
+                        else:
+                            self.debug.append(f"#get_suitable_entry: У блока ID={entry.id} отсутствуют l_min/l_max")
 
             self.debug.append("#get_suitable_entry: Не найдено подходящего блока")
             return None
 
-        # если длина не задана — берём первый по min длине
-        return SSGCatalog.objects.filter(fn__gte=load).order_by("fn", "l_min").first()
+        return (
+            SSGCatalog.objects
+            .filter(fn__gte=load)
+            .order_by("fn", "type", "l_min")
+            .first()
+        )
 
     def get_specification(self, variant: Variant, items, remove_empty: bool = False) -> List[Dict[str, Any]]:
-        if not variant:
-            self.debug.append('#Спецификация: Variant не выбран.')
-            return []
+        specification = super().get_specification(variant, items, remove_empty)
 
-        items = list(items)
-        if not items:
-            self.debug.append('#Спецификация: Список Item пуст.')
-            return []
-
-        base_compositions = variant.get_base_compositions()
-
-        specification: List[Dict[str, Any]] = [{
-            'detail_type': bc.base_child_id,
-            'variant': bc.base_child_variant_id,
-            'item': None,
-            'position': bc.position,
-            'material': None,
-            'count': bc.count,
-        } for bc in base_compositions]
-
-        rows_by_variant = defaultdict(list)
-        rows_by_dt = defaultdict(list)
-
-        for row in specification:
-            if row['variant'] is not None:
-                rows_by_variant[row['variant']].append(row)
-            rows_by_dt[row['detail_type']].append(row)
-
-        for it in items:
-            candidates = rows_by_variant.get(it.variant_id, [])
-            if not any(r for r in candidates if r['item'] is None):
-                candidates = rows_by_dt.get(it.type_id, [])
-
-            target_row = next((r for r in candidates if r['item'] is None), None)
-            if target_row:
-                target_row['item'] = it.id
-                target_row['material'] = it.material_id
-                if target_row in rows_by_variant.get(it.variant_id, []):
-                    rows_by_variant[it.variant_id].remove(target_row)
-                if target_row in rows_by_dt.get(it.type_id, []):
-                    rows_by_dt[it.type_id].remove(target_row)
-
-        if remove_empty:
-            specification = [row for row in specification if row['item'] is not None]
+        existing_item_ids = {row['item'] for row in specification}
+        if items:
+            for it in items:
+                if it.id not in existing_item_ids:
+                    specification.append({
+                        'detail_type': it.type_id,
+                        'variant': it.variant_id,
+                        'item': it.id,
+                        'position': 1,
+                        'material': it.parameters.get('material'),
+                        'count': 1,
+                    })
 
         return specification
 
@@ -389,7 +433,6 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
         return {
             "id": entry.id,
             "marking": f"SSG {entry.fn:04d}.{int(l_final):04d}.{entry.type}",
-            "stroke": None,
             "type": entry.type,
             "fn": entry.fn,
             "l_min": entry.l_min,
@@ -514,68 +557,198 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
             "materials": self.get_available_materials(),
         }
 
+    def get_spacer_item(self, variant, check_load, required_length: Optional[float] = None):
+        """
+        Получение распорки по нагрузке (check_load) и, по возможности, с учётом требуемой длины (required_length).
+        """
+        base_compositions = BaseComposition.objects.filter(base_parent_variant=variant)
+
+        for base_composition in base_compositions:
+            base_variant = base_composition.base_child_variant
+            base_detail_type = base_composition.base_child
+
+            if base_variant:
+                variants_to_check = [base_variant]
+            elif base_detail_type:
+                variants_to_check = Variant.objects.filter(detail_type=base_detail_type)
+            else:
+                self.debug.append(
+                    f'#Распорка: У базового состава {base_composition} отсутствуют Variant или DetailType.'
+                )
+                continue
+
+            for variant_to_check in variants_to_check:
+                attributes = variant_to_check.get_attributes()
+                load_attribute = self.get_attribute_by_usage(attributes, AttributeUsageChoices.LOAD)
+
+                if not load_attribute:
+                    self.debug.append(
+                        f'#Распорка: У Variant {variant_to_check} отсутствует атрибут LOAD.'
+                    )
+                    continue
+
+                # Базовый фильтр по нагрузке
+                qs = Item.objects.filter(
+                    variant=variant_to_check,
+                    **{f'parameters__{load_attribute.name}__gte': check_load}
+                )
+
+                # Попытка сузить по длине, если есть подходящий атрибут у Item.
+                # Явного usage для "длины распорки" нет, поэтому пробуем эвристики:
+                length_attr = (
+                    # если у вас есть спец-usage — подставьте здесь
+                        attributes.filter(usage=AttributeUsageChoices.SYSTEM_HEIGHT).first()
+                        or attributes.filter(name__in=['L', 'L_block', 'length']).first()
+                )
+
+                if required_length is not None and length_attr:
+                    # сначала пробуем >= требуемой длины (стандартный диапазон)
+                    qs_len = qs.filter(**{f'parameters__{length_attr.name}__gte': required_length}) \
+                        .order_by(f'parameters__{load_attribute.name}',
+                                  f'parameters__{length_attr.name}')
+                    item = qs_len.first()
+                    if item:
+                        self.debug.append(
+                            f'#Распорка: Найден Item {item.id} по нагрузке и длине '
+                            f'(LOAD≥{check_load}, {length_attr.name}≥{required_length}).'
+                        )
+                        return item
+
+                    # если не нашлось — fallback: без ограничения по длине (сохранить прежнее поведение)
+                    self.debug.append(
+                        f'#Распорка: По длине ничего не нашлось, ослабляем до подбора только по нагрузке.'
+                    )
+
+                # Fallback/старый путь: только по нагрузке
+                item = qs.order_by(f'parameters__{load_attribute.name}').first()
+                if item:
+                    self.debug.append(
+                        f'#Распорка: Найден Item {item.id} по нагрузке (без учёта длины).'
+                    )
+                    return item
+
+                self.debug.append(
+                    f'#Распорка: Не найден Item для Variant {variant_to_check} с нагрузкой ≥ {check_load}.'
+                )
+
+        self.debug.append('#Распорка: Не найден подходящий Item.')
+        return None
+
+    def calculate_mounting_length(self, variant, items_for_specification):
+        mounting_length = 0
+
+        for item in items_for_specification:
+            if item.variant.detail_type.product_family == self.get_product_family():
+                continue
+
+            for attribute in item.variant.get_attributes().filter(usage=AttributeUsageChoices.INSTALLATION_SIZE):
+                value = item.parameters.get(attribute.name)
+                if value:
+                    mounting_length += float(value)
+
+        return mounting_length, None
+
     def get_suitable_variant(self):
         load = self.get_load()
+        spacer_counts = self.get_spacer_counts()
         installation_length = self.get_installation_length()
-        mounting_length = self.get_mounting_length()
-        print(load, installation_length, mounting_length)
 
-        if load is None:
-            self.debug.append('Нагрузка не определена')
-            return None, None, []
+        if not load:
+            self.debug.append('Не задана пользовательская нагрузка. Поиск исполнения невозможен.')
+            return None, None, None
 
-        candidates = (
-            SSGCatalog.objects.filter(fn__gte=load)
-            .exclude(fn=None)
-            .order_by('fn', 'l_min')
-        )
-        print(candidates)
+        if not spacer_counts:
+            self.debug.append('Не задано количество распорок. Поиск невозможен.')
+            return None, None, None
 
-        for entry in candidates:
-            if installation_length is None:
-                block_length = entry.l_min
-                final_length = block_length + mounting_length
-                self.debug.append(f'Без длины установки: берем минимальную L = {block_length}')
-                self.entry = entry
-                return entry, final_length, self.get_specification_items(entry)
-
-            block_length = installation_length - mounting_length
-            if entry.l_min <= block_length <= entry.l_max:
-                final_length = installation_length
-                self.debug.append(f'L_block={block_length} попадает в диапазон {entry.l_min}–{entry.l_max}')
-                self.entry = entry
-                return entry, final_length, self.get_specification_items(entry)
-
-        self.debug.append('Не найдено подходящего исполнения')
-        return None, None, []
-
-    def get_specification_items(self, entry: Optional[SSGCatalog] = None) -> List[Item]:
         product_family = self.get_product_family()
+        if not product_family:
+            self.debug.append('Не указано семейство изделия.')
+            return None, None, None
+
+        variants = Variant.objects.filter(detail_type__product_family=self.get_product_family())
+        base_items_for_specification = self._get_base_items()
+
+        for fn in sorted(set(
+                SSGCatalog.objects.filter(fn__gte=load).exclude(fn=None).values_list('fn', flat=True)
+        )):
+            self.debug.append(f'=== Проверяем нагрузку FN = {fn} кН ===')
+
+            for type_value in [1, 2]:
+                self.debug.append(f'-- Проверка типа {type_value} --')
+                group = SSGCatalog.objects.filter(fn=fn, type=type_value).order_by('l_min')
+
+                for candidate in group:
+                    for variant in variants:
+                        self.debug.append(f'Проверяем вариант {variant} (id={variant.id})')
+
+                        mounting_length, errors = self.calculate_mounting_length(variant, base_items_for_specification)
+                        if errors:
+                            self.debug.append(f'Ошибка расчета монтажной длины: {errors}; принимаем 0.')
+                            mounting_length = 0
+
+                        if installation_length is not None:
+                            l_cold = installation_length
+                            l_required = l_cold - mounting_length
+
+                            self.debug.append(
+                                f'L_req = {installation_length}, монтажный размер = {mounting_length}, '
+                                f'длина распорки L = {l_required}'
+                            )
+
+                            if candidate.l_min <= l_required <= candidate.l_max:
+                                # только теперь подбираем саму распорку, зная требуемую длину
+                                spacer = self.get_spacer_item(variant, fn, required_length=l_required)
+                                if not spacer:
+                                    self.debug.append('Не найдена распорка для варианта (с учётом длины).')
+                                    continue
+
+                                items_for_specification = copy(base_items_for_specification)
+                                items_for_specification.append(spacer)
+
+                                l_final = l_cold
+                                self.debug.append(
+                                    f'Блок подходит по диапазону: {candidate.l_min} ≤ {l_required} ≤ {candidate.l_max}'
+                                )
+                                return variant, l_final, items_for_specification
+
+                            self.debug.append('Кандидат не подошёл по длине. Переход к следующему варианту.')
+                            continue
+
+                        else:
+                            block_length = candidate.l_min
+                            spacer = self.get_spacer_item(variant, fn, required_length=block_length)
+                            if not spacer:
+                                self.debug.append('Не найдена распорка для варианта (без заданной длины).')
+                                continue
+
+                            items_for_specification = copy(base_items_for_specification)
+                            items_for_specification.append(spacer)
+
+                            l_final = block_length + mounting_length
+                            self.debug.append(f'Без длины установки: берем минимальную L = {block_length}')
+                            return variant, l_final, items_for_specification
+
+                self.debug.append(f'Для FN = {fn}, тип {type_value} не удалось подобрать блок.')
+
+        self.debug.append('Не найдено подходящих исполнений для всех вариантов нагрузки.')
+        return None, None, None
+
+    def get_specification_items(self, compositions: List[BaseComposition], variant=None) -> List[Item]:
         variant = self.get_variant()
 
-        if not product_family:
-            self.debug.append('Не указана product_family')
-            return []
         if not variant:
-            self.debug.append('Не указано исполнение (variant)')
+            self.debug.append('#Спецификация: Variant не указан — спецификация не может быть получена')
             return []
 
-        groups = ComponentGroup.objects.filter(family=product_family)
-        detail_types = []
-        for group in groups:
-            detail_types.extend(group.detail_types.all())
-
-        compositions = BaseComposition.objects.filter(
-            detail_type__in=detail_types
-        ).distinct()
-
-        items = Item.objects.filter(
-            base_composition__in=compositions,
-            variant=variant
-        ).distinct()
-
-        self.debug.append(f'Найдено {items.count()} item(ов) по base_composition и variant')
-        return list(items)
+        items = list(
+            Item.objects.filter(base_composition__in=compositions, variant=variant).distinct()
+        )
+        if items:
+            self.debug.append(f"#Спецификация: Найдено {len(items)} Item(ов)")
+        else:
+            self.debug.append("#Спецификация: Список Item пуст.")
+        return items
 
     def initialize_selection_params(self) -> bool:
         """
@@ -637,18 +810,17 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
         # Подбор исполнения
         entry = self.get_suitable_entry()
-        mounting_length = self.get_mounting_length_from_items() or 0
+        mounting_length = self.get_mounting_length() or 0
         installation_length = self.get_installation_length()
 
         result = self.get_spacer_result(entry, installation_length, mounting_length)
         suitable_variant, shock_result, items_for_specification = self.get_suitable_variant()
-        print(items_for_specification, suitable_variant)
 
         specification = self.get_specification(suitable_variant, items_for_specification)
 
         return {
             "debug": self.debug,
-            "suitable_variant": None,
+            "suitable_variant": VariantSerializer(suitable_variant).data if suitable_variant else None,
             "spacer_result": result,
             "specifications": specification,
             "load_and_move": {
@@ -670,3 +842,11 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
                 "pipe_clamps_b": self.get_available_pipe_clamps_b(),
             },
         }
+
+    @staticmethod
+    def _group_by(items, key):
+        from collections import defaultdict
+        grouped = defaultdict(list)
+        for item in items:
+            grouped[key(item)].append(item)
+        return grouped

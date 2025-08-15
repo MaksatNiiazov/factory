@@ -58,7 +58,7 @@ def batch_recalculate_items():
         for item in items:
             before = (copy.copy(item.parameters), item.marking, item.name)
 
-            item.clean()
+            item.update_auto_fields()
 
             if before != (item.parameters, item.marking, item.name):
                 changed.append(item)

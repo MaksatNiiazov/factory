@@ -278,15 +278,26 @@ class ClampSelectionEntryInline(admin.TabularInline):
 
 @admin.register(ClampSelectionMatrix)
 class ClampSelectionMatrixAdmin(admin.ModelAdmin):
-    list_display = ["id", "product_family", "get_clamp_detail_types", "get_fastener_detail_types"]
+    list_display = ["id", "get_product_families", "get_clamp_detail_types", "get_fastener_detail_types"]
     list_display_links = ["id"]
-    filter_horizontal = ["clamp_detail_types", "fastener_detail_types"]
-    autocomplete_fields = ["product_family"]
+    filter_horizontal = ["product_families", "clamp_detail_types", "fastener_detail_types"]
     inlines = [ClampSelectionEntryInline]
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        return qs.prefetch_related("clamp_detail_types", "fastener_detail_types")
+        return qs.prefetch_related("product_families", "clamp_detail_types", "fastener_detail_types")
+
+    @admin.display(description=_("Семейства продуктов"))
+    def get_product_families(self, obj):
+        """
+        Возвращает строку с названиями семейств продуктов.
+        """
+        product_families = list(obj.product_families.all()[:5])
+        names = [family.name for family in product_families]
+
+        if obj.product_families.count() > 5:
+            return ", ".join(names) + ", ..."
+        return ", ".join(names)
 
     @admin.display(description=_("Типы деталей/изделий хомутов"))
     def get_clamp_detail_types(self, obj):

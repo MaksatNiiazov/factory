@@ -45,13 +45,15 @@ from ops.api.serializers import (
     CRMProjectSerializer, ItemExportSerializer, ItemImportSerializer, CRMProjectSyncERPSerializer,
     BaseCompositionSerializer, SelectionParamsSerializer, VariantWithDetailTypeSerializer, ShockCalcSerializer,
     ShockCalcResultSerializer, AvailableTopMountsRequestSerializer, TopMountVariantSerializer, AssemblyLengthSerializer,
-    AvailableMountsRequestSerializer, MountingVariantSerializer, ShockSelectionParamsSerializer, SpacerSelectionParamsSerializer,
+    AvailableMountsRequestSerializer, MountingVariantSerializer, ShockSelectionParamsSerializer,
+    SpacerSelectionParamsSerializer, GetSketchSerializer,
 
 )
 from ops.api.utils import get_extended_range, sum_mounting_sizes
 from ops.choices import ERPSyncType, AttributeUsageChoices, AttributeType
 from ops.loads.utils import get_suitable_loads
 from ops.marking_compiler import get_jinja2_env
+from ops.sketch.pdf import render_sketch_pdf
 from ops.models import (
     Project, DetailType, Item, ProjectItem, ProjectItemRevision, ItemChild, FieldSet, Attribute,
     Variant, ERPSync, BaseComposition
@@ -264,22 +266,24 @@ class ProjectItemViewSet(CustomModelViewSet):
     permission_classes = [ProjectItemPermission]
 
     def get_serializer_class(self):
-        if self.action in ['get_sketch', 'get_subsketch', 'set_selection', 'calculate', 'update_item']:
+        if self.action in ["set_selection", "calculate", "update_item"]:
             return Serializer
+        if self.action in ["get_sketch", "get_subsketch"]:
+            return GetSketchSerializer
 
         return ProjectItemSerializer
 
     def get_queryset(self):
         qs = ProjectItem.objects.all()
 
-        if 'project_pk' in self.kwargs:
-            project_pk = self.kwargs['project_pk']
+        if "project_pk" in self.kwargs:
+            project_pk = self.kwargs["project_pk"]
             qs = qs.filter(project_id=project_pk)
 
         return qs
 
     def perform_create(self, serializer):
-        serializer.save(project_id=self.kwargs['project_pk'])
+        serializer.save(project_id=self.kwargs["project_pk"])
 
     @action(methods=['GET'], detail=True)
     def selection_params(self, request, project_pk, pk):
@@ -375,7 +379,7 @@ class ProjectItemViewSet(CustomModelViewSet):
             selection = ShockSelectionAvailableOptions(project_item)
         
         available_options = selection.get_available_options()
-        specifications = available_options.get('specifications', [])
+        specifications = available_options.get('specification', [])
         parameters, locked_parameters = selection.get_parameters(available_options)
 
         if project_item.original_item:
@@ -390,48 +394,86 @@ class ProjectItemViewSet(CustomModelViewSet):
 
         return Response(serializer.data)
 
+    @swagger_auto_schema(
+        responses={
+            200: openapi.Response(
+                description="Файл с эксизом (SVG или PDF)",
+                schema=openapi.Schema(type=openapi.TYPE_FILE)
+            )
+        },
+    )
     @action(methods=['POST'], detail=True)
     def get_sketch(self, request: Request, project_pk: int, pk: int) -> FileResponse:
         """
-        Генерирует SVG-эскиз для элемента проекта и возвращает его как файл.
+        Генерирует SVG или PDF-эскиз для элемента проекта и возвращает его как файл.
         """
-        # Получение элемента проекта по первичному ключу
         project_item = ProjectItem.objects.get(pk=pk, deleted_at__isnull=True)
 
-        try:
-            # Генерация SVG-эскиза и имени файла
-            string_svg, filename = render_sketch(request, project_item, composition_type="specification")
-        except Exception as exc:
-            raise ValidationError(str(exc))
+        serializer_class = self.get_serializer_class()
+        serializer = serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
-        # Возвращение файла с SVG
-        buffer = BytesIO(string_svg)
-        response = FileResponse(buffer, as_attachment=True, filename=filename, content_type='image/svg+xml')
-        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        export_format = serializer.validated_data.get('format', 'svg').lower()
+
+        if export_format == "svg":
+            content_type = "image/svg+xml"
+            try:
+                output, filename = render_sketch(request, project_item, composition_type="specification")
+            except Exception as exc:
+                raise ValidationError(str(exc))
+        elif export_format == "pdf":
+            content_type = "application/pdf"
+            try:
+                output, filename = render_sketch_pdf(project_item, request.user)
+            except Exception as exc:
+                raise ValidationError(str(exc))
+        else:
+            raise FormatNotSupported(f"Формат {export_format} не поддерживается. Доступные форматы: svg, pdf.")
+
+        buffer = BytesIO(output)
+        response = FileResponse(buffer, content_type=content_type)
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
 
         return response
 
     @action(methods=['POST'], detail=True)
     def get_subsketch(self, request: Request, project_pk: int, pk: int) -> FileResponse:
         """
-        Генерирует дополнительный SVG-эскиз для элемента проекта и возвращает его как файл.
+        Генерирует дополнительный SVG или PDF эскиз для элемента проекта и возвращает его как файл.
         """
-        # Получение элемента проекта по первичному ключу
         project_item = ProjectItem.objects.get(pk=pk)
 
-        try:
-            # Генерация SVG-эскиза и имени файла
-            string_svg, filename = render_sketch(
-                request, project_item, composition_type='specification',
-                sketch_field_name='subsketch',
-                sketch_coords_field_name='subsketch_coords',
-            )
-        except Exception as exc:
-            raise ValidationError(str(exc))
+        serializer_class = self.get_serializer_class()
+        serializer = serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
-        # Возвращение файла с SVG
-        response = FileResponse(string_svg.decode('utf-8'), content_type='image/svg+xml')
-        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        export_format = serializer.validated_data.get("format", "svg").lower()
+
+        if export_format == "svg":
+            content_type = "image/svg+xml"
+            try:
+                output, filename = render_sketch(
+                    request, project_item, composition_type="specification",
+                    field_name="subsketch",
+                    coords_field_name="subsketch_coords",
+                )
+            except Exception as exc:
+                raise ValidationError(str(exc))
+        elif export_format == "pdf":
+            content_type = "application/pdf"
+            try:
+                output, filename = render_sketch_pdf(
+                    project_item, request.user, field_name="subsketch",
+                    coords_field_name="subsketch_coords",
+                )
+            except Exception as exc:
+                raise ValidationError(str(exc))
+        else:
+            raise FormatNotSupported(f"Формат {export_format} не поддерживается. Доступные форматы: svg, pdf.")
+
+        buffer = BytesIO(output)
+        response = FileResponse(buffer, content_type=content_type)
+        response["Content-Disposition"] = f"attachment; filename=\"{filename}\""
         return response
 
     @action(methods=['POST'], detail=True)

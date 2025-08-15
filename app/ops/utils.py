@@ -180,7 +180,13 @@ def wrap_words(comment):
     return final_lines
 
 
-def render_sketch(request, project_item, composition_type="temporary_composition"):
+def render_sketch(
+    request,
+    project_item,
+    composition_type="temporary_composition",
+    field_name="sketch",
+    coords_field_name="sketch_coords",
+    ):
     """
     Формирование эскиза
     """
@@ -189,7 +195,11 @@ def render_sketch(request, project_item, composition_type="temporary_composition
         # Если нет эскиза в админке, то и эскиз с параметрами не дадим сделать
         raise Exception('У выбранного типа продукта не заведен эскиз.')
 
-    sketch_path = project_item.original_item.variant.generate_sketch(project_item.original_item)
+    sketch_path = project_item.original_item.variant.generate_sketch(
+        project_item.original_item,
+        field_name=field_name,
+        coords_field_name=coords_field_name
+        )
 
     if composition_type == "temporary_composition":
         composition_objects = TemporaryComposition.objects.filter(tmp_parent=project_item.original_item)

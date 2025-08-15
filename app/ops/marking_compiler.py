@@ -143,6 +143,10 @@ class MarkingCompiler:
             prefix = normalize_designation(f'{child.type.category}_{child.type.designation}')
             logger.info('prefix: %s', prefix)
 
+            if prefix in context:
+                context[prefix][index] = context[prefix]
+                continue
+
             context[prefix] = {}
             context[prefix]['inner_id'] = child.inner_id
 

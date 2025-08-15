@@ -732,7 +732,10 @@ class Variant(SoftDeleteModelMixin, models.Model):
             return sketch_image
 
         draw = ImageDraw.Draw(sketch_image)
-        font = ImageFont.load_default()
+
+        img_width, img_height = sketch_image.size
+        font_size = max(12, int(img_height * 0.02))
+        font = ImageFont.truetype("arial.ttf", font_size)
 
         for coord in sketch_coords:
             attribute_id = coord.get('id')
@@ -741,18 +744,39 @@ class Variant(SoftDeleteModelMixin, models.Model):
             y = coord.get('y')
             rotation = coord.get('rotation', 0)
 
-            attribute = self.attributes.filter(id=attribute_id).first()
+            attribute = Attribute.objects.filter(id=attribute_id).first()
 
             if not attribute:
                 continue
 
             if child_id:
-                item_child = ItemChild.objects.filter(id=child_id).first()
+                base_composition = BaseComposition.objects.filter(id=child_id).first()
 
-                if not item_for_search:
+                if not base_composition:
                     continue
 
-                item_for_search = item_child.item
+                if base_composition.base_child_variant:
+                    child_item = Item.objects.filter(
+                        parents__item=item,
+                        variant=base_composition.base_child_variant,
+                        position=base_composition.position,
+                    ).first()
+
+                    if not child_item:
+                        continue
+
+                    item_for_search = child_item
+                else:
+                    child_item = Item.objects.filter(
+                        parents__item=item,
+                        type=base_composition.base_child,
+                        position=base_composition.position,
+                    ).first()
+
+                    if not child_item:
+                        continue
+
+                    item_for_search = child_item
             else:
                 item_for_search = item
 
@@ -766,13 +790,14 @@ class Variant(SoftDeleteModelMixin, models.Model):
             text_width, text_height = bbox[2] - bbox[0], bbox[3] - bbox[1]
 
             # Создаем текстовое изображение с прозрачным фоном
-            padding = 4
-            text_image = Image.new('RGBA', (text_width, text_height + padding), (255, 255, 255, 0))
+            pad_y = max(2, int(font.size * 0.25), int(sketch_image.height * 0.003))
+            pad_x = max(2, int(font.size * 0.10), int(sketch_image.width * 0.002))
+            text_image = Image.new('RGBA', (text_width + 2 * pad_x, text_height + 2 * pad_y), (255, 255, 255, 0))
             text_draw = ImageDraw.Draw(text_image)
             text_draw.text((0, 0), text, font=font, fill="black")
 
             centered_x = int(x - text_width / 2)
-            centered_y = int(y - text_height / 2)
+            centered_y = int(y - (text_height + 2 * pad_y) / 2)
 
             if rotation:
                 rotated_text = text_image.rotate(-rotation, expand=1)
@@ -1341,15 +1366,22 @@ class Item(SoftDeleteModelMixin, TimeStampedModel, models.Model):
                 self.parameters[attribute.name] = value
                 self.parameters_errors.update(**errors)
 
-    def clean(self):
-        if self.variant_id and self.type_id != self.variant.detail_type_id:
-            raise ValidationError({'variant': _('Исполнение не принадлежит этому типу')})
-        
+    def update_auto_fields(self) -> None:
+        """
+        Обновляет автоматически вычисляемые поля: параметры, маркировку и наименование.
+        """
         self.recalculate_parameters()
         self.marking, self.marking_errors = self.generate_marking()
 
         if not self.name_manual_changed:
             self.name = self.generate_name()
+
+    def clean(self) -> None:
+        """
+        Проверяет валидность полей перед сохранением объекта Item.
+        """
+        if self.variant_id and self.type_id != self.variant.detail_type_id:
+            raise ValidationError({'variant': _('Исполнение не принадлежит этому типу')})
 
     def _set_default_comment(self):
         self.comment = self.type.default_comment if self.type else ''
@@ -1377,6 +1409,8 @@ class Item(SoftDeleteModelMixin, TimeStampedModel, models.Model):
                 self.inner_id = 100000
             if not self.comment:
                 self._set_default_comment()
+
+        self.update_auto_fields()
 
         try:
             super().save(*args, **kwargs)

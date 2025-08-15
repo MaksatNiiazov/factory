@@ -122,7 +122,7 @@ class BaseSelectionAvailableOptions:
             return None
 
         return Variant.objects.get(id=variant_id)
-    
+
     def get_specification(self, variant: Variant, items, remove_empty: bool = False) -> List[Dict[str, Any]]:
         if not variant:
             self.debug.append('#Спецификация: Variant не выбран.')
@@ -152,6 +152,8 @@ class BaseSelectionAvailableOptions:
                 rows_by_variant[row['variant']].append(row)
             rows_by_dt[row['detail_type']].append(row)
 
+        max_pos_overall = max((r['position'] for r in specification), default=0)
+
         for it in items:
             candidates = rows_by_variant.get(it.variant_id, [])
             if not any(r for r in candidates if r['item'] is None):
@@ -165,6 +167,16 @@ class BaseSelectionAvailableOptions:
                     rows_by_variant[it.variant_id].remove(target_row)
                 if target_row in rows_by_dt.get(it.type_id, []):
                     rows_by_dt[it.type_id].remove(target_row)
+            else:
+                max_pos_overall += 1
+                specification.append({
+                    'detail_type': it.type_id,
+                    'variant': it.variant_id,
+                    'item': it.id,
+                    'position': max_pos_overall,
+                    'material': it.material_id,
+                    'count': 1,
+                })
 
         if remove_empty:
             specification = [row for row in specification if row['item'] is not None]
@@ -196,7 +208,6 @@ class BaseSelectionAvailableOptions:
             current_locked_parameters.extend(locked_parameters)
             item.locked_parameters = current_locked_parameters
 
-        item.clean()
         item.save()
 
         if specifications is None:
@@ -226,6 +237,11 @@ class BaseSelectionAvailableOptions:
                 position=position,
                 count=count,
             )
+
+        # Пересохраняем объект Item, чтобы параметры были пересчитаны
+        # TODO: Рефакторить, чтобы избежать лишнего сохранения
+        item = Item.objects.get(id=item.id)
+        item.save()
 
         return item
 

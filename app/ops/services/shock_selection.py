@@ -441,29 +441,31 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
         pipe_diameter = PipeDiameter.objects.filter(id=pipe_diameter_id).first()
         temperature = self.params['pipe_params']['temperature']
 
+        # Кандидаты материалов по температуре
         if temperature is not None:
-            materials = Material.objects.filter(min_temp__lte=temperature, max_temp__gte=temperature)
-            material_ids = list(materials.values_list('id', flat=True))
+            materials_qs = Material.objects.filter(min_temp__lte=temperature, max_temp__gte=temperature)
             self.debug.append(
-                f"#Список креплений A: Найдено {len(material_ids)} материалов подходящих по температуре {temperature}°C"
+                f"#Список креплений A: Найдено {materials_qs.count()} материалов подходящих по температуре {temperature}°C"
             )
         else:
-            materials = Material.objects.all()
-            material_ids = list(materials.values_list('id', flat=True))
+            materials_qs = Material.objects.all()
             self.debug.append(
-                f"#Список креплений A: Температура не задана — будут использоваться все материалы ({len(material_ids)} шт.)"
+                f"#Список креплений A: Температура не задана — будут использоваться все материалы ({materials_qs.count()} шт.)"
             )
-        material_ids = list(materials.values_list('id', flat=True))
 
-        self.debug.append(
-            f"#Список креплений A: Найдено {materials.count()} материалов подходящих по температуре {temperature}°C")
+        explicit_material_id = self.params['pipe_params'].get('material')
+        if explicit_material_id:
+            chosen_material_id = explicit_material_id
+            self.debug.append(f"#Список креплений A: Явно выбран материал id={chosen_material_id}")
+        else:
+            chosen_material_id = materials_qs.values_list('id', flat=True).first()
+            if chosen_material_id:
+                self.debug.append(
+                    f"#Список креплений A: Материал не задан — по температуре выбран id={chosen_material_id}")
+            else:
+                self.debug.append("#Список креплений A: Подходящих материалов не найдено")
 
-        if not pipe_diameter:
-            self.debug.append(
-                f"#Список креплений A: Не выбран или не найден диаметр трубы с id={pipe_diameter_id}. Поиск невозможен.")
-            return []
-
-        # Получаем группу креплений A
+        # Группа креплений A
         mounting_group_a = self.get_mounting_group_a()
         if not mounting_group_a:
             self.debug.append("#Список креплений A: Не выбрана группа креплений A. Поиск невозможен.")
@@ -482,57 +484,46 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
                 self.debug.append(f"#Список креплений A: У варианта id={variant.id} нет атрибутов.")
                 continue
 
-            if self.is_clamp(attributes):
-                self.debug.append(f"#Список креплений A: Исполнение {variant} является хомутом")
+            load_attribute = self.get_attribute_by_usage(attributes, AttributeUsageChoices.LOAD)
+            pipe_diameter_attribute = self.get_pipe_diameter_attribute(attributes)
+            material_attr = attributes.filter(catalog=AttributeCatalog.MATERIAL).first()
 
-                load_attribute = self.get_attribute_by_usage(attributes, AttributeUsageChoices.LOAD)
-                pipe_diameter_attribute = self.get_pipe_diameter_attribute(attributes)
+            if not load_attribute:
+                self.debug.append(f"#Список креплений A: У варианта {variant.id} отсутствует атрибут нагрузки.")
+                continue
 
-                if not load_attribute or not pipe_diameter_attribute:
-                    self.debug.append(
-                        f"#Список креплений A: У варианта {variant.id} отсутствует нужный атрибут: "
-                        f"LOAD={bool(load_attribute)}, DIAMETER={bool(pipe_diameter_attribute)}"
-                    )
-                    continue
+            load_value = self.get_load()
 
-                load_value = self.get_load()
-                material_attrs = attributes.filter(catalog=AttributeCatalog.MATERIAL)
+            # Базовый фильтр
+            filter_params = {
+                'variant': variant,
+                f'parameters__{load_attribute.name}__gte': load_value,
+            }
 
-                matching_items = []
-
-                for material_attr in material_attrs:
-                    filter_params = {
-                        'variant': variant,
-                        f'parameters__{load_attribute.name}__gte': load_value,
-                        f'parameters__{material_attr.name}__in': material_ids,
-                    }
-
-                    if pipe_diameter:
-                        filter_params[f'parameters__{pipe_diameter_attribute.name}'] = pipe_diameter.id
-                        self.debug.append(
-                            f"#Список креплений A: Фильтрация по нагрузке ≥ {load_value}, "
-                            f"диаметру = {pipe_diameter.id}, материалу ({material_attr.name}) ∈ {material_ids}"
-                        )
-                    else:
-                        self.debug.append(
-                            f"#Список креплений A: Фильтрация по нагрузке ≥ {load_value}, "
-                            f"без диаметра, материалу ({material_attr.name})"
-                        )
-
-                    matched = list(items.filter(**filter_params).values_list('id', flat=True))
-                    matching_items.extend(matched)
-
+            # Фильтр по диаметру, если атрибут есть
+            if pipe_diameter_attribute and pipe_diameter:
+                filter_params[f'parameters__{pipe_diameter_attribute.name}'] = pipe_diameter.id
+                self.debug.append(f"#Список креплений A: Фильтрация по диаметру = {pipe_diameter.id}")
+            # Фильтр по материалу, если атрибут есть и выбран ОДИН материал
+            if material_attr and chosen_material_id:
+                filter_params[f'parameters__{material_attr.name}'] = chosen_material_id
                 self.debug.append(
-                    f"#Список креплений A: Найдено {len(matching_items)} хомутов для исполнения {variant}.")
+                    f"#Список креплений A: Фильтрация по диаметру = {pipe_diameter.id}"
+                )
+            elif material_attr and not chosen_material_id:
+                self.debug.append(
+                    "#Список креплений A: Атрибут материала есть, но подходящий материал не выбран — пропускаю фильтрацию по материалу")
 
-                found_items.extend(matching_items)
-            else:
-                self.debug.append(f"#Список креплений A: Исполнение {variant} не является хомутом.")
+            matched = list(items.filter(**filter_params).values_list('id', flat=True))
+            self.debug.append(
+                f"#Список креплений A: Найдено {len(matched)} подходящих элементов для варианта {variant}."
+            )
+            found_items.extend(matched)
 
         if not found_items:
-            self.debug.append("#Список креплений A: Не найдено подходящих хомутов.")
+            self.debug.append("#Список креплений A: Не найдено подходящих креплений.")
         else:
-            self.debug.append(f"#Список креплений A: Итоговое количество найденных хомутов: {len(found_items)}")
+            self.debug.append(f"#Список креплений A: Итоговое количество найденных креплений: {len(found_items)}")
 
         return found_items
 
@@ -565,7 +556,7 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
                 filter_params = {
                     'variant': variant,
-                    f'parameters__{load_attribute.name}__lte': self.get_load(),
+                    f'parameters__{load_attribute.name}__gte': self.get_load(),
                 }
                 bracket_items = list(items.filter(**filter_params).values_list('id', flat=True))
                 self.debug.append(f"#Список креплений B: Найдено {len(bracket_items)} скоб для исполнения {variant}")
@@ -906,7 +897,6 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
         reserve_coef = config.SSB_EXTRA_MARGIN_PERCENT
         reserve_mm = float(stroke) * reserve_coef
 
-        l_cold = float(l_cold)
         l_cold = float(l_cold)
         move = float(move)
 

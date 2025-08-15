@@ -126,6 +126,9 @@ def get_str(value, default=''):
 
 
 def calculate_scaled_dimensions(image_width, image_height, max_width_pixels=512, max_height_pixels=680, initial_dpi=72):
+    image_width = float(image_width)
+    image_height = float(image_height)
+
     # Исходные физические размеры
     w_mm = image_width / initial_dpi * 25.4
     h_mm = image_height / initial_dpi * 25.4
@@ -150,8 +153,12 @@ def calculate_scaled_dimensions(image_width, image_height, max_width_pixels=512,
     return image_width, image_height, w_mm, h_mm, new_width, new_height
 
 
-def draw_main(pdf, project_item, double):
-    sketch_path = project_item.original_item.variant.generate_sketch(project_item.original_item)
+def draw_main(pdf, project_item, double, field_name="sketch", coords_field_name="sketch_coords"):
+    sketch_path = project_item.original_item.variant.generate_sketch(
+        project_item.original_item,
+        field_name=field_name,
+        coords_field_name=coords_field_name,
+    )
     image_data = work_with_image(sketch_path, project_item, double, coords=(90, 120))
     sketch_path = image_data['sketch']
 
@@ -523,7 +530,13 @@ def draw_attributes(pdf, project_item, created_by, created_date):
     pdf.line(x_start + 129.5, y_start + 67, WIDTH - 10, y_start + 67)
 
 
-def render_sketch_pdf(project_item, created_by, composition_type='temporary_composition'):
+def render_sketch_pdf(
+    project_item,
+    created_by,
+    composition_type='temporary_composition',
+    field_name="sketch",
+    coords_field_name="sketch_coords",
+):
     if not project_item.original_item.variant.sketch:
         raise Exception('У выбранного типа продукта не заведен эскиз.')
 
@@ -544,7 +557,7 @@ def render_sketch_pdf(project_item, created_by, composition_type='temporary_comp
     pdf.set_font('ArialNarrow', size=10)
     pdf.add_page()
 
-    draw_main(pdf, project_item, double)
+    draw_main(pdf, project_item, double, field_name, coords_field_name)
     draw_metadata(pdf, project_item)
     draw_attributes(pdf, project_item, created_by, today)
     draw_specifications(pdf, project_item)

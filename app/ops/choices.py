@@ -104,3 +104,4 @@ class AttributeUsageChoices(MaxLengthMixin, TextChoices):
     RATED_STROKE = 'rated_stroke', _('Номинальный ход')
     INSTALLATION_SIZE = 'installation_size', _('Монтажный размер')
     PIPE_DIAMETER = 'pipe_diameter', _('Диаметр трубы')
+    CLAMP_LOAD = 'clamp_load', _('Нагрузка для хомутов (Fn₁)')

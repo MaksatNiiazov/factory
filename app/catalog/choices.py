@@ -35,9 +35,10 @@ class PipeDirectionChoices(MaxLengthMixin, TextChoices):
 
 
 class ComponentGroupType(MaxLengthMixin, TextChoices):
-    STUDS = 'studs', _('Список шпилек')
-    COUPLING = 'coupling', _('Список муфт')
-    SERIES_SELECTABLE = 'series_selectable', _('С выбором серии')
+    STUDS = "studs", _("Список шпилек")
+    COUPLING = "coupling", _("Список муфт")
+    FASTENER = "fastener", _("Список крепежа")
+    SERIES_SELECTABLE = "series_selectable", _("С выбором серии")
 
 
 class ClampSelectionEntryResult(MaxLengthMixin, TextChoices):
