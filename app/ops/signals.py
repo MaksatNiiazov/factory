@@ -1,12 +1,14 @@
+import re
+
 from django.dispatch import receiver
 
 from django.db.models import Q
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, pre_save
 
 from django.core.cache import cache
 
 from ops.constants import STALE_SET_KEY, STALE_LOCK
-from ops.models import DetailType, Item, Attribute, ItemChild, Variant
+from ops.models import DetailType, Item, Attribute, ItemChild, Variant, BaseComposition
 from ops.tasks import batch_recalculate_items
 
 
@@ -58,6 +60,62 @@ def trigger_items_recalculation_on_item_save(sender, instance, **kwargs):
     """
     items = Item.objects.filter(children__child=instance)
     _mark_items_as_stale(items)
+
+
+@receiver(pre_save, sender=BaseComposition)
+def update_attribute_calculated_value_on_position_change(sender, instance, **kwargs):
+    """
+    Сигнал, который вызывается после изменения позиции в BaseComposition.
+    """
+    if not instance.pk:
+        return
+
+    # Получаем старую позицию
+    try:
+        old_instance = sender.objects.get(pk=instance.pk)
+    except sender.DoesNotExist:
+        old_instance = None
+
+    if old_instance is None or old_instance.position == instance.position:
+        return  # Позиция не изменилась
+
+    if instance.base_child_variant:
+        category = instance.base_child_variant.detail_type.category
+        designation = instance.base_child_variant.detail_type.designation
+    else:
+        category = instance.base_child.category
+        designation = instance.base_child.designation
+
+    old_pos = old_instance.position
+    new_pos = instance.position
+
+    # Образец вида: <assembly_unit_FHD>.3.h или <assembly_unit_FHD>.h
+    if old_pos == 1:
+        pattern = re.compile(rf"<{category}_{designation}>\.([A-Za-z_][A-Za-z0-9_]*)")
+    else:
+        pattern = re.compile(rf"<{category}_{designation}>\.{old_pos}\.([A-Za-z0-9_]+)")
+
+    attrs = Attribute.objects.filter(
+        calculated_value__icontains=f"<{category}_{designation}>"
+    ).filter(
+        Q(detail_type=instance.base_parent) | Q(variant=instance.base_parent_variant)
+    )
+
+    for attr in attrs:
+        orig = attr.calculated_value
+
+        if not orig:
+            continue
+
+        def replacer(match):
+            attr_name = match.group(1)
+            return f"<{category}_{designation}>.{new_pos}.{attr_name}"
+
+        updated = re.sub(pattern, replacer, orig)
+
+        if updated != orig:
+            attr.calculated_value = updated
+            attr.save(update_fields=["calculated_value"])
 
 
 @receiver(post_save, sender=Variant)

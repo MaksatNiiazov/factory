@@ -1076,6 +1076,62 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
     def get_desired_system_height(self) -> Optional[float]:
         return self.params['system_settings']['system_height']
 
+    def calculate_cold_mounting_length(self, variant: Variant) -> Tuple[Optional[Attribute], Optional[float], Optional[Dict]]:
+        """
+        Вычисляет длину холодной монтировки для исполнения (Variant).
+        """
+        cache_key = f"calculate_cold_mounting_length_{variant.id}"
+
+        if self.key_exists_in_cache(cache_key):
+            attribute, value, errors = self.get_from_cache(cache_key)
+            return attribute, value, errors
+
+        attribute = Attribute.objects.for_variant(variant).filter(usage=AttributeUsageChoices.E_INITIAL).first()
+
+        ephemeral_item = Item(
+            type=variant.detail_type,
+            variant=variant,
+            parameters={},
+        )
+
+        children = []
+        spring_block = self.get_suitable_spring_block_item()
+
+        if spring_block:
+            children.append(spring_block)
+
+        specification = self.get_specification(variant, children, remove_empty=True)
+
+        selected_spring = self.params["spring_choice"].get("selected_spring")
+
+        if not selected_spring:
+            result = None, None, None
+            self.add_to_cache(cache_key, result)
+            return result
+
+        extra_context = {
+            "Finitial": selected_spring.get("load_initial"),
+            "Fcold": selected_spring.get("load_minus"),
+            "k": selected_spring.get("spring_stiffness"),
+        }
+
+        value, errors = ephemeral_item.calculate_attribute(
+            attribute,
+            extra_context=extra_context,
+            children=specification,
+        )
+
+        if value is not None:
+            # Приводим значение к целому числу с округлением
+            value = int(Decimal(str(value)).to_integral_value(rounding=ROUND_HALF_UP))
+
+        result = attribute, value, errors
+        self.add_to_cache(cache_key, result)
+        self.debug.append(
+            f"#Расчет {attribute.name}: {value} (с ошибками: {errors}) для исполнения {variant.name} (id={variant.id})"
+        )
+        return result
+
     def calculate_system_height_without_studs(self, variant: Variant) -> Tuple[Optional[float], Optional[Dict]]:
         attribute = Attribute.objects.for_variant(variant).filter(name='Etmp').first()
 
@@ -1106,6 +1162,11 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
         if top_mount:
             children.append(top_mount)
 
+        coupling_items = self.find_couplings(variant)
+
+        if coupling_items:
+            children.extend(coupling_items)
+
         extra_context = {}
         selected_spring = self.params['spring_choice'].get('selected_spring')
         if not selected_spring:
@@ -1114,6 +1175,10 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
         extra_context['Finitial'] = selected_spring.get('load_initial')
         extra_context['Fcold'] = selected_spring.get('load_minus')
         extra_context['k'] = selected_spring.get('spring_stiffness')
+
+        cold_mounting_length_attribute, cold_mounting_length, cold_mounting_length_errors = self.calculate_cold_mounting_length(variant)
+
+        extra_context[cold_mounting_length_attribute.name] = cold_mounting_length
 
         specification = self.get_specification(variant, children, remove_empty=True)
         value, errors = ephemeral_item.calculate_attribute(attribute, extra_context=extra_context, children=specification)
@@ -1170,6 +1235,9 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
         extra_context['Fcold'] = selected_spring.get('load_minus')
         extra_context['k'] = selected_spring.get('spring_stiffness')
 
+        cold_mounting_length_attribute, cold_mounting_length, cold_mounting_length_errors = self.calculate_cold_mounting_length(variant)
+        extra_context[cold_mounting_length_attribute.name] = cold_mounting_length
+
         specification = self.get_specification(variant, children, remove_empty=True)
         value, errors = ephemeral_item.calculate_attribute(attribute, extra_context=extra_context, children=specification)
 
@@ -1177,22 +1245,6 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
             return None, errors
 
         return value, errors
-
-    def filter_suitable_variants_via_child(self, variants: QuerySet, item: Item, count=1) -> QuerySet:
-        parent_detail_types = BaseComposition.objects.filter(
-            base_child=item.type, count=count,
-        ).values_list('base_parent', flat=True)
-
-        parent_variants = BaseComposition.objects.filter(
-            base_child_variant=item.variant, count=count,
-        ).values_list('base_parent_variant', flat=True)
-
-        variants = variants.filter(detail_type__in=parent_detail_types)
-
-        if parent_variants:
-            variants = variants.filter(id__in=parent_variants)
-
-        return variants
 
     def get_stud_items(self, base_composition, ascending: bool = True):
         base_child = base_composition.base_child
@@ -1242,6 +1294,45 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
         return attr_name, item_qs
 
+    def find_couplings(self, variant):
+        coupling_component_group = ComponentGroup.objects.filter(
+            group_type=ComponentGroupType.COUPLING,
+        ).first()
+
+        if not coupling_component_group:
+            self.debug.append(f"#Поиск муфт: Не нашли список муфт в ComponentGroup.")
+            return None
+
+        coupling_detail_types = coupling_component_group.detail_types.all()
+
+        base_compositions = BaseComposition.objects.filter(
+            base_parent_variant=variant,
+            base_child__in=coupling_detail_types,
+        )
+        total = base_compositions.aggregate(total_count=Sum("count"))["total_count"] or 0
+
+        if not total:
+            self.debug.append(f"#Поиск муфт: В базовом составе нет муфт.")
+            return []
+
+        found_coupling_items = []
+
+        for base_composition in base_compositions:
+            attribute_name, coupling_items = self.get_coupling_items(base_composition)
+
+            filter_params = {
+                f"parameters__{attribute_name}__in": self.get_load_group_ids_by_lgv(),
+            }
+            coupling_item = coupling_items.filter(**filter_params).first()
+
+            if not coupling_item:
+                self.debug.append(f"#Поиск муфт: Для базового состава {base_composition} не нашли подходящей муфты.")
+                return None
+
+            found_coupling_items.append(coupling_item)
+
+        return found_coupling_items
+
     def find_one_stud(self, base_compositions, rest_system_height):
         self.debug.append(f"#Поиск шпилька: В базовом составе 1 шпилька, ищем только одну шпильку.")
         base_composition = base_compositions[0]
@@ -1288,50 +1379,13 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
                 if val1 + val2 == rest_system_height:
                     self.debug.append(f"Найдены подходящие шпильки: {it1} (id={it1.id}), {it2} (id={it2.id})")
-
-                    # Теперь надо искать одну муфту
-                    coupling_component_group = ComponentGroup.objects.filter(
-                        group_type=ComponentGroupType.COUPLING,
-                    ).first()
-
-                    if not coupling_component_group:
-                        self.debug.append(f"#Поиск шпилька: Но не нашли список муфт в ComponentGroup.")
-                        continue
-
-                    coupling_detail_types = coupling_component_group.detail_types.all()
-
-                    base_compositions = BaseComposition.objects.filter(
-                        base_parent_variant=variant,
-                        base_child__in=coupling_detail_types,
-                    )
-                    total = base_compositions.aggregate(total_count=Sum("count"))["total_count"] or 0
-
-                    if total != 1:
-                        self.debug.append(f"#Поиск шпилька: В базовом составе количество муфт не равно 1.")
-                        continue
-
-                    coupling_comp = base_compositions.first()
-                    attr_name, coupling_items = self.get_coupling_items(coupling_comp)
-                    self.debug.append(f"Всего муфт: {coupling_items.count()}")
-
-                    filter_params = {
-                        f"parameters__{attr_name}__in": self.get_load_group_ids_by_lgv(),
-                    }
-                    coupling_items = coupling_items.filter(**filter_params)
-                    self.debug.append(f"Фильтруем муфты по параметрам: {filter_params}")
-
-                    if coupling_items.exists():
-                        coupling_item = coupling_items.first()
-                        self.debug.append(
-                            f"Поиск шпилька: Найден один подходящая муфта: {coupling_item} (id={coupling_item.id})"
-                        )
-                        return it1, it2, coupling_item
+                    return it1, it2
 
         self.debug.append(
             f"Не смогли найти подходящие шпильки по параметрам {attr1} и {attr2} для высоты {rest_system_height}. "
             f"Пропускаем."
         )
-        return None, None, None
+        return None, None
 
     def find_three_studs(self, variant, base_compositions, rest_system_height):
         self.debug.append(
@@ -1380,59 +1434,13 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
                             f"{it3} (id={it3.id})"
                         )
 
-                        # Теперь надо искать двух муфт
-                        coupling_component_group = ComponentGroup.objects.filter(
-                            group_type=ComponentGroupType.COUPLING,
-                        ).first()
-
-                        if not coupling_component_group:
-                            self.debug.append(f"#Поиск шпилька: Но не нашли список муфт в ComponentGroup.")
-                            continue
-
-                        coupling_detail_types = coupling_component_group.detail_types.all()
-
-                        base_compositions = BaseComposition.objects.filter(
-                            base_parent_variant=variant,
-                            base_child__in=coupling_detail_types,
-                        )
-                        total = base_compositions.aggregate(total_count=Sum("count"))["total_count"] or 0
-
-                        if total != 2:
-                            self.debug.append(f"#Поиск шпилька: В базовом составе количество муфт не равно 2.")
-                            continue
-
-                        if len(base_compositions) == 1:
-                            coupling_comp1 = coupling_comp2 = base_compositions[0]
-                        else:
-                            coupling_comp1, coupling_comp2 = base_compositions
-
-                        attr1, coupling_items1 = self.get_coupling_items(coupling_comp1)
-                        attr2, coupling_items2 = self.get_coupling_items(coupling_comp2)
-
-                        filter_params1 = {
-                            f"parameters__{attr1}__in": self.get_load_group_ids_by_lgv(),
-                        }
-                        coupling_items1 = coupling_items1.filter(**filter_params1)
-
-                        filter_params2 = {
-                            f"parameters__{attr2}__in": self.get_load_group_ids_by_lgv(),
-                        }
-                        coupling_items2 = coupling_items2.filter(**filter_params2)
-
-                        if coupling_items1.exists() and coupling_items2.exists():
-                            coupling_item1 = coupling_items1.first()
-                            coupling_item2 = coupling_items2.first()
-                            self.debug.append(
-                                f"Поиск шпилька: Найдены две подходящие муфты: {coupling_item1} (id={coupling_item1.id}), "
-                                f"{coupling_item2} (id={coupling_item2.id})"
-                            )
-                            return it1, it2, it3, coupling_item1, coupling_item2
+                        return it1, it2, it3
 
         self.debug.append(
             f"Не смогли найти подходящие шпильки по параметрам {attr1}, {attr2} и {attr3} для высоты {rest_system_height}. "
             f"Пропускаем."
         )
-        return None, None, None, None, None
+        return None, None, None
 
     def get_suitable_variant(self) -> Tuple[Optional[Variant], Optional[float], Optional[List]]:
         """
@@ -1537,6 +1545,14 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
                 )
                 continue
 
+            attribute = Attribute.objects.for_variant(variant).filter(usage=AttributeUsageChoices.E_INITIAL).first()
+            if not attribute:
+                self.debug.append(
+                    f'#Поиск DetailType: У исполнения {variant} (id={variant.id}) не найден атрибут '
+                    f'с использованием E_INITIAL. Пропускаю.'
+                )
+                continue
+
             current_system_height, errors = self.calculate_system_height_without_studs(variant)
 
             if errors:
@@ -1571,6 +1587,14 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
                     self.debug.append(f'Вычисленная системная высота больше чем нужной, пропускаем.')
                     continue
 
+                coupling_items = self.find_couplings(variant)
+
+                if coupling_items is None:
+                    self.debug.append(f"Не нашли муфты, пропускаем.")
+                    continue
+
+                items_for_specification.extend(coupling_items)
+
                 self.debug.append(f'#Поиск шпилька: Количество шпилек в базовом составе: {total}')
                 if total == 1:
                     stud_item = self.find_one_stud(base_compositions, rest_system_height)
@@ -1582,27 +1606,24 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
                     else:
                         continue
                 elif total == 2:
-                    stud_item1, stud_item2, coupling_item = self.find_two_studs(variant, base_compositions, rest_system_height)
+                    stud_item1, stud_item2 = self.find_two_studs(variant, base_compositions, rest_system_height)
 
-                    if stud_item1 and stud_item2 and coupling_item:
+                    if stud_item1 and stud_item2:
                         items_for_specification.append(stud_item1)
                         items_for_specification.append(stud_item2)
-                        items_for_specification.append(coupling_item)
                         self.debug.append(f'Найдено подходящее исполнение с двумя шпильками. Поиск завершен.')
                         found = True
                     else:
                         continue
                 elif total == 3:
-                    stud_item1, stud_item2, stud_item3, coupling_item1, coupling_item2 = self.find_three_studs(
+                    stud_item1, stud_item2, stud_item3 = self.find_three_studs(
                         variant, base_compositions, rest_system_height,
                     )
 
-                    if stud_item1 and stud_item2 and stud_item3 and coupling_item1 and coupling_item2:
+                    if stud_item1 and stud_item2 and stud_item3:
                         items_for_specification.append(stud_item1)
                         items_for_specification.append(stud_item2)
                         items_for_specification.append(stud_item3)
-                        items_for_specification.append(coupling_item1)
-                        items_for_specification.append(coupling_item2)
                         self.debug.append(f'Найдено подходящее исполнение с тремя шпильками. Поиск завершен.')
                         found = True
                     else:
@@ -1699,10 +1720,12 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
         # Диаметр трубопровода (OD)
         parameters['OD'] = self.get_pipe_diameter().id
 
-        # Монтажный размер (E)
-        parameters['E'] = available_options['calculated_system_height']
+        # Монтажный размер блока (E2)
+        variant = self.get_variant()
+        attr, cold_mounting_length, errors = self.calculate_cold_mounting_length(variant)
+        parameters[attr.name] = cold_mounting_length
 
-        locked_parameters = ['E']
+        locked_parameters = [attr.name]
         
         return parameters, locked_parameters
 

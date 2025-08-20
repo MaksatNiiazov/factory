@@ -1,7 +1,8 @@
+from collections import Counter, defaultdict
 from copy import copy
 from typing import Optional, List, Dict, Any, Tuple
 
-from django.db.models import Q, OuterRef, Exists, Count
+from django.db.models import Q, OuterRef, Exists, Count, Sum
 
 from constance import config
 
@@ -744,6 +745,22 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
         ).exclude(fn=FN_ON_REQUEST).order_by('fn', 'stroke')
 
         variants = Variant.objects.filter(detail_type__product_family=self.get_product_family())
+        if base_items_for_specification:
+            for base_item in base_items_for_specification:
+                need = getattr(base_item, 'count', 1) or 1
+                variants = self.filter_suitable_variants_via_child(variants, base_item, count=need)
+
+            # строгая проверка кратностей по базе (без shock)
+            prefilt = []
+            for v in variants:
+                if self._check_base_counts(v, base_items_for_specification):
+                    prefilt.append(v)
+                else:
+                    self.debug.append(
+                        f'#SSB: variant id={v.id} отброшен префильтром — не хватает кратности по базовым компонентам.'
+                    )
+            variants = prefilt
+
 
         current_fn = None
         for fn, group in self._group_by(candidates, key=lambda c: c.fn).items():
@@ -763,6 +780,14 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
                         items_for_specification = copy(base_items_for_specification)
                         items_for_specification.append(shock)
+
+                        # строгая проверка кратностей с учётом shock
+                        if not self._check_base_counts(variant, items_for_specification):
+                            self.debug.append(
+                                f'#SSB: variant id={variant.id} отброшен — base_composition не покрывает '
+                                f'базовые+shock по кратностям.'
+                            )
+                            continue
 
                         mounting_length, errors = self.calculate_mounting_length(variant, items_for_specification)
                         if errors:
@@ -994,12 +1019,15 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
         if not available_options:
             available_options = self.get_available_options()
 
-        l1 = available_options.get('shock_result', {}).get('l1', None)
+        shock_result = available_options.get('shock_result', {})
 
-        if l1 is not None:
-            parameters['L1'] = l1
+        variant = self.get_variant()
+        attributes = variant.get_attributes() if variant else []
 
-        return parameters, []
+        for attribute in attributes:
+            value = shock_result.get(attribute.name.lower())
+            if value is not None:
+                parameters[attribute.name] = value
 
     def get_available_options(self):
         self.debug = []
@@ -1223,3 +1251,31 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
         for item in items:
             grouped[key(item)].append(item)
         return grouped
+
+    def _check_base_counts(self, variant: Variant, items_for_spec: List[Item]) -> bool:
+        required = Counter()  # (type_id, variant_id|None) -> need
+        for it in items_for_spec:
+            required[(it.type_id, getattr(it, 'variant_id', None))] += getattr(it, 'count', 1) or 1
+
+        exact = Counter()  # (type_id, variant_id) -> count
+        generic = Counter()  # type_id -> count
+        total_by_type = Counter()  # type_id -> count (exact + generic)
+
+        for bc in variant.get_base_compositions():
+            c = bc.count or 1
+            t_id, v_id = bc.base_child_id, bc.base_child_variant_id
+            total_by_type[t_id] += c
+            if v_id is None:
+                generic[t_id] += c
+            else:
+                exact[(t_id, v_id)] += c
+
+        for (t_id, v_id), need in required.items():
+            if v_id is None:
+                if total_by_type[t_id] < need:
+                    return False
+            else:
+                if exact[(t_id, v_id)] + generic[t_id] < need:
+                    return False
+
+        return True

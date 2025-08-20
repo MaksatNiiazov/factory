@@ -366,7 +366,7 @@ class ProjectItemViewSet(CustomModelViewSet):
         """
         selection_type = request.query_params.get('selection_type', 'product_selection')
 
-        if selection_type not in ['product_selection', 'shock_selection']:
+        if selection_type not in ['product_selection', 'shock_selection', 'ssg_selection']:
             return Response({
                 'detail': f'Некорретный selection_type: {selection_type}'
             }, status=400)

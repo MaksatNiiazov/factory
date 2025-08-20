@@ -1,9 +1,11 @@
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple
 
+from django.db.models import QuerySet
+
 from catalog.models import ProductFamily
-from ops.choices import AttributeType, AttributeCatalog, AttributeUsageChoices
-from ops.models import Attribute, ItemChild, Variant, Item
+from ops.choices import AttributeType, AttributeCatalog
+from ops.models import Attribute, ItemChild, Variant, Item, BaseComposition
 
 
 class BaseSelectionAvailableOptions:
@@ -26,6 +28,27 @@ class BaseSelectionAvailableOptions:
 
         self.params = params
         self.debug = []
+        self._cached = {}
+
+    def add_to_cache(self, key, value):
+        """
+        Добавляет значение в кэш по ключу.
+        """
+        self._cached[key] = value
+
+    def key_exists_in_cache(self, key):
+        """
+        Проверяет, существует ли ключ в кэше.
+        Возвращает True, если ключ существует, иначе False.
+        """
+        return key in self._cached
+
+    def get_from_cache(self, key):
+        """
+        Возвращает значение из кэша по ключу, если оно существует.
+        Если значение не найдено, возвращает None.
+        """
+        return self._cached.get(key, None)
 
     def get_dn_attribute(self, attributes: List[Attribute]) -> Optional[Attribute]:
         """
@@ -168,28 +191,24 @@ class BaseSelectionAvailableOptions:
                 if target_row in rows_by_dt.get(it.type_id, []):
                     rows_by_dt[it.type_id].remove(target_row)
             else:
-                max_pos_overall += 1
-                specification.append({
-                    'detail_type': it.type_id,
-                    'variant': it.variant_id,
-                    'item': it.id,
-                    'position': max_pos_overall,
-                    'material': it.material_id,
-                    'count': 1,
-                })
+                self.debug.append(
+                    f"#Спецификация: нет строки в base_composition под Item id={it.id} "
+                    f"(type={it.type_id}, variant={it.variant_id})."
+                )
 
         if remove_empty:
             specification = [row for row in specification if row['item'] is not None]
 
         return specification
-    
+
     def get_parameters(self, available_options: Optional[Dict[str, Any]] = None) -> Tuple[Dict[str, Any], List[str]]:
         """
         Возвращает параметры для создания или обновления изделия.
         """
         raise NotImplementedError("Метод get_parameters должен быть реализован в подклассе.")
 
-    def update_item(self, author, item: Item, parameters: Optional[Dict] = None, locked_parameters: Optional[List] = None, specifications: Optional[List] = None) -> Item:
+    def update_item(self, author, item: Item, parameters: Optional[Dict] = None,
+                    locked_parameters: Optional[List] = None, specifications: Optional[List] = None) -> Item:
         current_parameters = item.parameters
 
         if not current_parameters:
@@ -203,7 +222,7 @@ class BaseSelectionAvailableOptions:
 
         if not current_locked_parameters:
             current_locked_parameters = []
-        
+
         if locked_parameters:
             current_locked_parameters.extend(locked_parameters)
             item.locked_parameters = current_locked_parameters
@@ -213,7 +232,7 @@ class BaseSelectionAvailableOptions:
         if specifications is None:
             available_options = self.get_available_options()
             specifications = available_options['specifications']
-        
+
         children = item.children.all()
 
         current_children = set((child.id, child.position, child.count) for child in children)
@@ -245,7 +264,8 @@ class BaseSelectionAvailableOptions:
 
         return item
 
-    def create_item(self, author, parameters: Optional[Dict] = None, locked_parameters: Optional[List] = None, specifications: Optional[List] = None) -> Item:
+    def create_item(self, author, parameters: Optional[Dict] = None, locked_parameters: Optional[List] = None,
+                    specifications: Optional[List] = None) -> Item:
         variant = self.get_variant()
 
         if not variant:
@@ -265,3 +285,23 @@ class BaseSelectionAvailableOptions:
 
     def get_available_options(self):
         raise NotImplementedError
+
+    def filter_suitable_variants_via_child(self, variants: QuerySet, item: Item, count=1) -> QuerySet:
+        parent_detail_types = BaseComposition.objects.filter(
+            base_parent_variant__in=variants,
+            base_child=item.type,
+            count=count,
+        ).values_list('base_parent', flat=True)
+
+        parent_variants = BaseComposition.objects.filter(
+            base_parent_variant__in=variants,
+            base_child_variant=item.variant,
+            count=count,
+        ).values_list('base_parent_variant', flat=True)
+
+        variants = variants.filter(detail_type__in=parent_detail_types)
+
+        if parent_variants:
+            variants = variants.filter(id__in=parent_variants)
+
+        return variants
