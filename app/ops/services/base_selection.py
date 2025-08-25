@@ -175,8 +175,6 @@ class BaseSelectionAvailableOptions:
                 rows_by_variant[row['variant']].append(row)
             rows_by_dt[row['detail_type']].append(row)
 
-        max_pos_overall = max((r['position'] for r in specification), default=0)
-
         for it in items:
             candidates = rows_by_variant.get(it.variant_id, [])
             if not any(r for r in candidates if r['item'] is None):

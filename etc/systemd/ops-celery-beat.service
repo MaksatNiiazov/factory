@@ -7,7 +7,6 @@ Type=simple
 User=ops
 Group=ops
 EnvironmentFile=/etc/conf.d/ops.conf
-RuntimeDirectory=ops
 #WorkingDirectory=/opt/celery
 
 ExecStart=/bin/sh -c '${CELERY_BIN} -A ${CELERY_APP} beat \
@@ -16,6 +15,10 @@ ExecStart=/bin/sh -c '${CELERY_BIN} -A ${CELERY_APP} beat \
     --logfile=${CELERYBEAT_LOG_FILE} --loglevel=${CELERYBEAT_LOG_LEVEL}'
 #ExecStop=/bin/systemctl kill slb-celery-beat.service
 Restart=always
+
+RuntimeDirectory=ops
+RuntimeDirectoryMode=0775
+RuntimeDirectoryPreserve=yes
 
 [Install]
 WantedBy=multi-user.target

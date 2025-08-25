@@ -1246,7 +1246,7 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
         return value, errors
 
-    def get_stud_items(self, base_composition, ascending: bool = True):
+    def load_stud_lengths(self, base_composition, ascending=True):
         base_child = base_composition.base_child
         base_child_variant = base_composition.base_child_variant
 
@@ -1257,21 +1257,28 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
         attr = self.get_attribute_by_usage(attributes, AttributeUsageChoices.LENGTH)
         if not attr:
-            return None, []
+            return None, [], set(), Item.objects.none()
 
         attr_name = attr.name
 
-        ordering = f"parameters__{attr_name}" if ascending else f"-parameters__{attr_name}"
-
-        item_qs = Item.objects.filter(
+        qs = Item.objects.filter(
             Q(type=base_child) | Q(variant=base_child_variant) if base_child_variant else Q(type=base_child)
         ).exclude(
             parameters__isnull=True
         ).exclude(
             **{f'parameters__{attr_name}__isnull': True}
-        ).order_by(ordering)
+        )
 
-        return attr_name, item_qs
+        raw = qs.values_list(f'parameters__{attr_name}', flat=True)
+        lengths = []
+        for v in raw:
+            if isinstance(v, (int, float)):
+                lengths.append(int(v))
+            elif isinstance(v, str) and v.isdigit():
+                lengths.append(int(v))
+        lengths.sort(reverse=not ascending)
+
+        return attr_name, lengths, set(lengths), qs
 
     def get_coupling_items(self, base_composition):
         base_child = base_composition.base_child
@@ -1336,7 +1343,7 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
     def find_one_stud(self, base_compositions, rest_system_height):
         self.debug.append(f"#Поиск шпилька: В базовом составе 1 шпилька, ищем только одну шпильку.")
         base_composition = base_compositions[0]
-        attr_name, items_qs = self.get_stud_items(base_composition)
+        attr_name, lengths, set_lengths, qs = self.load_stud_lengths(base_composition, ascending=True)
 
         if not attr_name:
             self.debug.append(
@@ -1344,101 +1351,88 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
             )
             return None
 
-        filter_params = {f"parameters__{attr_name}": rest_system_height}
+        if rest_system_height in set_lengths:
+            item = qs.filter(**{f"parameters__{attr_name}": rest_system_height}).first()
+            if item:
+                self.debug.append(f"Найдено подходящая шпилька: {item} (id={item.id})")
+                return item
 
-        items = items_qs.filter(**filter_params)
-
-        if items.exists():
-            first_item = items.first()
-            self.debug.append(f"Найдено подходящая шпилька: {first_item} (id={first_item.id})")
-            return first_item
-
-        self.debug.append(
-            f"Не смогли найти подходящую шпильку по параметру {attr_name}={rest_system_height}. Пропускаем."
-        )
+        self.debug.append(f"Не смогли найти подходящую шпильку по {attr_name}={rest_system_height}.")
         return None
 
     def find_two_studs(self, variant, base_compositions, rest_system_height):
         self.debug.append('#Поиск шпилька: В базовом составе 2 шпильки, ищем пару шпилек.')
         comp1, comp2 = base_compositions
 
-        attr1, items1 = self.get_stud_items(comp1)
-        attr2, items2 = self.get_stud_items(comp2)
+        attr1, len1, set1, qs1 = self.load_stud_lengths(comp1, ascending=True)
+        attr2, len2, set2, qs2 = self.load_stud_lengths(comp2, ascending=True)
 
-        for it1 in items1:
-            val1 = it1.parameters.get(attr1)
-            if not isinstance(val1, (int, float)):
-                continue
-            for it2 in items2:
-                val2 = it2.parameters.get(attr2)
-                if not isinstance(val2, (int, float)):
-                    continue
+        if not attr1 or not attr2:
+            self.debug.append('#Поиск шпилька: нет LENGTH у одной из шпилек.')
+            return None, None
 
-                val1 = int(val1)
-                val2 = int(val2)
-
-                if val1 + val2 == rest_system_height:
-                    self.debug.append(f"Найдены подходящие шпильки: {it1} (id={it1.id}), {it2} (id={it2.id})")
-                    return it1, it2
-
-        self.debug.append(
-            f"Не смогли найти подходящие шпильки по параметрам {attr1} и {attr2} для высоты {rest_system_height}. "
-            f"Пропускаем."
+        a_list, a_attr, a_qs, b_set, b_attr, b_qs = (
+            (len1, attr1, qs1, set2, attr2, qs2) if len(len1) <= len(len2)
+            else (len2, attr2, qs2, set1, attr1, qs1)
         )
+
+        visited = set()
+        for l in a_list:
+            need = rest_system_height - l
+            if l in visited:
+                continue
+            visited.add(l)
+
+            if need in b_set:
+                it1 = a_qs.filter(**{f"parameters__{a_attr}": l}).first()
+                it2 = b_qs.filter(**{f"parameters__{b_attr}": need}).first()
+                if it1 and it2:
+                    studs = sorted(
+                        [(int(it1.parameters.get(a_attr)), it1),
+                         (int(it2.parameters.get(b_attr)), it2)],
+                        key=lambda x: x[0],
+                        reverse=True
+                    )
+                    bigger, smaller = studs[0][1], studs[1][1]
+
+                    self.debug.append(
+                        f"Найдены подходящие шпильки: {bigger} (id={bigger.id}), {smaller} (id={smaller.id})"
+                    )
+                    return bigger, smaller
+
+        self.debug.append(f"Не нашли пару шпилек для высоты {rest_system_height}.")
         return None, None
 
     def find_three_studs(self, variant, base_compositions, rest_system_height):
         self.debug.append(
-            '#Поиск шпилька: В базовом составе 3 шпильки. Условие: 2 шпильки одинаковой длины, '
-            'третья шпилька минимальной длины, сумма всех трех шпилек равна высоте системы.'
+            '#Поиск шпилька: В базовом составе 3 шпильки. Условие: 2 одинаковые + третья минимальная; сумма = высоте.'
         )
         comp1, comp2, comp3 = base_compositions
 
-        attr1, items1 = self.get_stud_items(comp1, ascending=False)
-        attr2, items2 = self.get_stud_items(comp2, ascending=False)
-        attr3, items3 = self.get_stud_items(comp3)
+        attr1, len1, set1, qs1 = self.load_stud_lengths(comp1, ascending=False)  # по условию — идём от больших
+        attr2, len2, set2, qs2 = self.load_stud_lengths(comp2, ascending=False)
+        attr3, len3, set3, qs3 = self.load_stud_lengths(comp3, ascending=True)  # "третья минимальная" ищется снизу
 
-        for it1 in items1:
-            val1 = it1.parameters.get(attr1)
-            if not isinstance(val1, (int, float)):
+        if not (attr1 and attr2 and attr3):
+            self.debug.append('#Поиск шпилька: нет LENGTH у одной из шпилек.')
+            return None, None, None
+
+        shorter_two = len1 if len(len1) <= len(len2) else len2
+        for l in shorter_two:
+            third = rest_system_height - 2 * l
+            if third > l:
                 continue
-
-            for it2 in items2:
-                val2 = it2.parameters.get(attr2)
-
-                if not isinstance(val2, (int, float)):
-                    continue
-
-                val1 = int(val1)
-                val2 = int(val2)
-
-                # Проверяем, что две шпильки одинаковой длины
-                if val2 != val1:
-                    continue
-
-                for it3 in items3:
-                    val3 = it3.parameters.get(attr3)
-                    if not isinstance(val3, (int, float)):
-                        continue
-
-                    val3 = int(val3)
-
-                    # Проверяем, что третья шпилька минимальной длины
-                    if val3 > val1:
-                        continue
-
-                    total_length = val1 + val2 + val3
-                    if total_length == rest_system_height:
-                        self.debug.append(
-                            f"Найдены подходящие шпильки: {it1} (id={it1.id}), {it2} (id={it2.id}), "
-                            f"{it3} (id={it3.id})"
-                        )
-
-                        return it1, it2, it3
+            if third in set3:
+                it1 = qs1.filter(**{f"parameters__{attr1}": l}).first()
+                it2 = qs2.filter(**{f"parameters__{attr2}": l}).first()
+                it3 = qs3.filter(**{f"parameters__{attr3}": third}).first()
+                if it1 and it2 and it3:
+                    self.debug.append(
+                        f"Найдены подходящие шпильки: {it1} (id={it1.id}), {it2} (id={it2.id}), {it3} (id={it3.id})")
+                    return it1, it2, it3
 
         self.debug.append(
-            f"Не смогли найти подходящие шпильки по параметрам {attr1}, {attr2} и {attr3} для высоты {rest_system_height}. "
-            f"Пропускаем."
+            f"Не нашли тройку шпилек для высоты {rest_system_height}."
         )
         return None, None, None
 

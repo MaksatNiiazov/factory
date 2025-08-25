@@ -7,12 +7,12 @@ Type=simple
 User=ops
 Group=ops
 EnvironmentFile=/etc/conf.d/ops.conf
-RuntimeDirectory=ops
 ExecStart=/bin/sh -c 'PYTHONPATH=${OPS_ROOT}/app:${PYTHONPATH} ${OPS_ROOT}/env/bin/python ${OPS_ROOT}/env/bin/gunicorn -b ${GUNICORN_SOCK_FILE} --access-logfile ${GUNICORN_ACCESS_LOG_FILE} project.wsgi:application'
 ExecStop=/bin/systemctl kill ops-gunicorn.service
 
 RuntimeDirectory=ops
 RuntimeDirectoryMode=0775
+RuntimeDirectoryPreserve=yes
 
 [Install]
 WantedBy=multi-user.target

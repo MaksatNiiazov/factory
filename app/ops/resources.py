@@ -148,8 +148,6 @@ def is_duplicate(row: Dict[str, Any], instance: Item, fields: List[str],
             row_value = normalize_value(row.get(field))
             inst_value = normalize_value(instance.parameters.get(field)) if instance.parameters else None
             if row_value != inst_value:
-                if inst_value is None:
-                    continue
                 return False
     return True
 
@@ -207,7 +205,10 @@ class Base(resources.ModelResource, metaclass=DehydrateMetaClass):
         )
 
     def import_row(self, row, instance_loader, **kwargs):
-        if all(value is None for value in row.values()):
+        def _empty(v):
+            return v is None or (isinstance(v, str) and v.strip() == '')
+
+        if all(_empty(v) for v in row.values()):
             row_result = RowResult()
             row_result.import_type = "skip"
             row_result.diff = []
@@ -228,12 +229,16 @@ class Base(resources.ModelResource, metaclass=DehydrateMetaClass):
                 pass
 
         variant_value = row.get('variant')
-        variant = self.variants_by_name.get(variant_value) if variant_value else next(iter(self.variants_by_name.values()), None)
+        variant_key = str(variant_value).strip().lower() if variant_value is not None else None
+        if not variant_key:
+            raise ValidationError(_('Для создания объекта необходимо указать "variant".'))
+
+        variant = self.variants_by_name.get(variant_key)
         if not variant:
-            raise Exception(_(f'Исполнение "{variant_value}" не найдено для типа {detail_type}'))
+            raise ValidationError(_(f'Исполнение "{variant_value}" не найдено для типа {detail_type}'))
 
         compare_fields = ['variant'] + list(self.base_attrs | self.variant_attrs)
-        for candidate in self.items_by_variant.get(variant.name, []):
+        for candidate in self.items_by_variant.get(variant.name.strip().lower(), []):
             if is_duplicate(row, candidate, compare_fields, self.materials_by_id, self.materials_by_name):
                 return candidate, False
 
@@ -249,29 +254,51 @@ class Base(resources.ModelResource, metaclass=DehydrateMetaClass):
                 raise ValidationError(f"DetailType не найден для '{self.category}' и '{self.designation}'")
 
             self.variants_by_name = {
-                v.name: v for v in Variant.objects.filter(deleted_at=None, detail_type=self.detail_type)
+                v.name.strip().lower(): v for v in Variant.objects.filter(deleted_at=None, detail_type=self.detail_type)
             }
             self.variant_attrs = set(
                 Attribute.objects.filter(variant__detail_type=self.detail_type).values_list('name', flat=True))
             self.base_attrs = set(
                 Attribute.objects.filter(detail_type=self.detail_type, variant__isnull=True).values_list('name',
                                                                                                          flat=True))
-            self.materials_by_id = {m.id: m for m in Material.objects.all() if m.id is not None}
-            self.materials_by_name = {m.name.strip().lower(): m for m in Material.objects.all() if m.name}
+            mats = list(Material.objects.all())
+            self.materials_by_id = {m.id: m for m in mats if m.id is not None}
+            self.materials_by_name = {m.name.strip().lower(): m for m in mats if m.name}
+
             self.items_by_variant = defaultdict(list)
             for item in Item.objects.filter(type=self.detail_type).select_related('variant'):
-                if item.variant:
-                    self.items_by_variant[item.variant.name].append(item)
+                if item.variant and item.variant.name:
+                    key = item.variant.name.strip().lower()
+                    self.items_by_variant[key].append(item)
 
         return super().before_import(dataset, **kwargs)
 
     def import_field(self, field: Field, obj: Item, data: Dict[str, Any], is_m2m=False, **kwargs):
         column_name = field.column_name
         value = data.get(column_name)
+
+        if isinstance(value, str) and value.strip() == '':
+            value = None
+
         if obj.parameters is None:
             obj.parameters = {}
 
+        if column_name == 'variant':
+            if value is None:
+                return
+            key = str(value).strip().lower()
+            variant = self.variants_by_name.get(key)
+            if not variant:
+                raise ValidationError(_(f'Исполнение "{value}" не найдено для типа {self.detail_type}'))
+            obj.variant = variant
+            if not getattr(obj, 'type_id', None):
+                obj.type = self.detail_type
+            return
+
         if column_name.lower() == 'material':
+            if value is None:
+                obj.parameters[column_name] = None
+                return
             try:
                 material = self.materials_by_id.get(int(value))
             except (ValueError, TypeError):
@@ -286,14 +313,22 @@ class Base(resources.ModelResource, metaclass=DehydrateMetaClass):
                     'material_value': value,
                     'message': f'Материал "{value}" не найден.'
                 })
+            return
+
         elif column_name in getattr(self, 'allowed_parameter_fields', set()):
             obj.parameters[column_name] = value
 
     def after_import(self, dataset: Any, result: Any, using_transactions: bool, dry_run: bool, **kwargs):
         items = Item.objects.select_related('type').filter(Q(name__isnull=True) | Q(name=''))
+        to_update = []
         for item in items:
-            item.name = item.marking
-        Item.objects.bulk_update(items, fields=['name'])
+            try:
+                item.name = item.marking or ''
+            except Exception:
+                continue
+            to_update.append(item)
+        if to_update:
+            Item.objects.bulk_update(to_update, fields=['name'])
 
     class Meta:
         model = Item

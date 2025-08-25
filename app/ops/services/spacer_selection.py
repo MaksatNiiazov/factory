@@ -1,4 +1,4 @@
-from collections import defaultdict
+from collections import defaultdict, Counter
 from copy import copy
 from typing import Optional, Dict, Any, List
 
@@ -666,8 +666,17 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
             self.debug.append('Не указано семейство изделия.')
             return None, None, None
 
-        variants = Variant.objects.filter(detail_type__product_family=self.get_product_family())
         base_items_for_specification = self._get_base_items()
+
+        variants = Variant.objects.filter(detail_type__product_family=self.get_product_family())
+
+        for it in base_items_for_specification:
+            cnt = getattr(it, 'count', 1) or 1
+            before = variants.count()
+            variants = self.filter_suitable_variants_via_child(variants, it, cnt)
+            after = variants.count()
+            if after < before:
+                self.debug.append(f"#SSG: префильтр по базовым компонентам (item {it.id}): {before} -> {after}")
 
         for fn in sorted(set(
                 SSGCatalog.objects.filter(fn__gte=load).exclude(fn=None).values_list('fn', flat=True)
@@ -697,7 +706,6 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
                             )
 
                             if candidate.l_min <= l_required <= candidate.l_max:
-                                # только теперь подбираем саму распорку, зная требуемую длину
                                 spacer = self.get_spacer_item(variant, fn, required_length=l_required)
                                 if not spacer:
                                     self.debug.append('Не найдена распорка для варианта (с учётом длины).')
@@ -705,6 +713,11 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
                                 items_for_specification = copy(base_items_for_specification)
                                 items_for_specification.append(spacer)
+
+                                if not self._check_base_counts(variant, items_for_specification):
+                                    self.debug.append(
+                                        '#SSG: вариант отброшен — не хватает кратности по базовым компонентам (с учётом распорки).')
+                                    continue
 
                                 l_final = l_cold
                                 self.debug.append(
@@ -724,6 +737,11 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
                             items_for_specification = copy(base_items_for_specification)
                             items_for_specification.append(spacer)
+
+                            if not self._check_base_counts(variant, items_for_specification):
+                                self.debug.append(
+                                    '#SSG: вариант отброшен — не хватает кратности по базовым компонентам (с учётом распорки).')
+                                continue
 
                             l_final = block_length + mounting_length
                             self.debug.append(f'Без длины установки: берем минимальную L = {block_length}')
@@ -850,3 +868,31 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
         for item in items:
             grouped[key(item)].append(item)
         return grouped
+
+    def _check_base_counts(self, variant: Variant, items_for_spec: List[Item]) -> bool:
+        required = Counter()  # (type_id, variant_id|None) -> need
+        for it in items_for_spec:
+            required[(it.type_id, getattr(it, 'variant_id', None))] += getattr(it, 'count', 1) or 1
+
+        exact = Counter()  # (type_id, variant_id) -> count
+        generic = Counter()  # type_id -> count
+        total_by_type = Counter()  # type_id -> count (exact + generic)
+
+        for bc in variant.get_base_compositions():
+            c = bc.count or 1
+            t_id, v_id = bc.base_child_id, bc.base_child_variant_id
+            total_by_type[t_id] += c
+            if v_id is None:
+                generic[t_id] += c
+            else:
+                exact[(t_id, v_id)] += c
+
+        for (t_id, v_id), need in required.items():
+            if v_id is None:
+                if total_by_type[t_id] < need:
+                    return False
+            else:
+                if exact[(t_id, v_id)] + generic[t_id] < need:
+                    return False
+
+        return True

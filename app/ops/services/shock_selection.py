@@ -993,7 +993,7 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
                 f"Расчёт удлинителя: {l_cold} - ({l} + {l4} + {mounting_length}) = {extender_length}"
             )
 
-        return {
+        result = {
             'marking': marking,
             'stroke': stroke,
             'type': type_,
@@ -1009,6 +1009,36 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
             'l4': entry.l4,
             'l_final': l_final,
         }
+        catalog_fields = [
+            field.name for field in entry._meta.fields
+            if field.name not in {'id', 'l1', 'l2', 'l2_min', 'l2_max', 'l3_min', 'l3_max', 'l4', 'l_final'}
+        ]
+        for field_name in catalog_fields:
+            result[field_name] = getattr(entry, field_name)
+
+        # Build parameters similarly to how they are applied when creating an Item
+        parameters = {}
+        attributes = variant.get_attributes() if variant else []
+
+        print(attributes)
+
+        for attribute in attributes:
+            attr_key = attribute.name
+            print(attr_key)
+            if attr_key in result and result.get(attr_key) is not None:
+                value = result[attr_key]
+            elif attribute.default not in (None, ""):
+                value = attribute.convert(attribute.default)
+                # expose defaulted value in shock_result using snake_case key
+                result[attr_key] = value
+            else:
+                continue
+
+            parameters[attribute.name] = value
+
+        result['parameters'] = parameters
+
+        return result
 
     def get_parameters(self, available_options: Optional[Dict[str, Any]] = None) -> Tuple[Dict[str, Any], List[str]]:
         """
@@ -1019,15 +1049,12 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
         if not available_options:
             available_options = self.get_available_options()
 
-        shock_result = available_options.get('shock_result', {})
+        l1 = available_options.get('shock_result', {}).get('l1', None)
 
-        variant = self.get_variant()
-        attributes = variant.get_attributes() if variant else []
+        if l1 is not None:
+            parameters['L1'] = l1
 
-        for attribute in attributes:
-            value = shock_result.get(attribute.name.lower())
-            if value is not None:
-                parameters[attribute.name] = value
+        return parameters, []
 
     def get_available_options(self):
         self.debug = []

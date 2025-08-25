@@ -366,7 +366,7 @@ class ProjectItemViewSet(CustomModelViewSet):
         """
         selection_type = request.query_params.get('selection_type', 'product_selection')
 
-        if selection_type not in ['product_selection', 'shock_selection', 'ssg_selection']:
+        if selection_type not in ['product_selection', 'shock_selection']:
             return Response({
                 'detail': f'Некорретный selection_type: {selection_type}'
             }, status=400)
@@ -1220,7 +1220,7 @@ class ItemViewSet(CustomModelViewSet):
         serializer = TaskSerializer(task)
         data = serializer.data
 
-        process_import_task.delay(task.id)
+        process_import_task(task.id)
 
         return Response(data, status=status.HTTP_201_CREATED)
 

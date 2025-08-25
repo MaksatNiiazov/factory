@@ -7,7 +7,6 @@ Type=forking
 User=ops
 Group=ops
 EnvironmentFile=/etc/conf.d/ops.conf
-RuntimeDirectory=ops
 #WorkingDirectory=/opt/celery
 
 ExecStart=/bin/sh -c '${CELERY_BIN} -A ${CELERY_APP} multi start ${CELERYD_NODES} \
@@ -24,11 +23,9 @@ ExecReload=/bin/sh -c '${CELERY_BIN} -A ${CELERY_APP} multi restart ${CELERYD_NO
 
 Restart=always
 
-#PermissionsStartOnly=True
 RuntimeDirectory=ops
 RuntimeDirectoryMode=0775
-#LogsDirectory=ops
-#LogsDirectoryMode=0775
+RuntimeDirectoryPreserve=yes
 
 [Install]
 WantedBy=multi-user.target

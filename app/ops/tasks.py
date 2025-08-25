@@ -333,7 +333,7 @@ def notify_task_status(task):
         "status": task.status,
         "status_details": task.status_details,
     }
-    send_event_to_users(task.owner.id, command_type="task_updated", data=data)
+    # send_event_to_users(task.owner.id, command_type="task_updated", data=data)
 
 
 @shared_task

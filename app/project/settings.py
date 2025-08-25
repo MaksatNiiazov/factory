@@ -1,42 +1,46 @@
-import socket
+import os
 from pathlib import Path
 
 from import_export.formats.base_formats import XLSX
 
+from dotenv import load_dotenv
+
 BASE_APP_DIR = Path(__file__).resolve().parent.parent
 BASE_PRJ_DIR = BASE_APP_DIR.parent
 
-# Определение какая машина (здесь хост-имена для машины самой в ос, а не домены или что-то типа того)
-IS_PRODUCTION_PORTAL = socket.gethostname() in ["CRM", "crm"]  # прод боевой витценман
-IS_PRODUCTION_TEST = socket.gethostname() in ["rayne", 'server', 'ops-server', 'opori']  # прод тестовый витценман
-IS_PRODUCTION_ANY = any((IS_PRODUCTION_PORTAL, IS_PRODUCTION_TEST))  # один из продов тестовый или боевой
-IS_DEVELOPMENT = not IS_PRODUCTION_ANY
+dotenv_path = BASE_PRJ_DIR / ".env"
+load_dotenv(dotenv_path=dotenv_path, encoding="utf-8")
 
-# Имя приложения в ОС - используется в путях к логам< временным файлам и т.д.
+# Имя приложения в ОС - используется в путях к логам, временным файлам и т.д.
 APP_SYSNAME = 'ops'
 
-SECRET_KEY = 'django-insecure-#%%hqo^%1&25n(p+4v3h6+!5f65x75$+z^z6n^#z7+(ov=2xcs'
+SECRET_KEY = os.getenv("SECRET_KEY")
 
-DEBUG = IS_DEVELOPMENT
+IS_PRODUCTION = os.getenv("IS_PRODUCTION", "False") == "True"
 
-ALLOWED_HOSTS = [
-    '46.161.52.221', '.medv.ru', '127.0.0.1', '192.168.0.2', '192.168.0.244', '192.168.0.245', 'CRM',
-    'CRM.WITZ', '92.50.148.46', '192.168.3.150', '92.118.114.27', '192.168.3.143', 'localhost',
-]
+DEBUG = not IS_PRODUCTION
+
+ALLOWED_HOSTS = ["127.0.0.1", "localhost", "92.118.114.27", "192.168.3.143", "wicad-ops.witz.local"]
 
 # app: django.contrib.sites
 SITE_ID = 1
+
+APP_REDIS_CONNECTION = os.getenv("APP_REDIS_CONNECTION", "redis://localhost:6379/2")
 
 INSTALLED_APPS = [
     'dal',
     'dal_select2',
     'modeltranslation',
+
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
+
     'user_sessions',
+
     'django.contrib.messages',
     'django.contrib.staticfiles',
+
     'constance',
     'constance.backends.database',
     'crispy_forms',
@@ -99,11 +103,7 @@ WSGI_APPLICATION = 'project.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'wzn_2',
-        'USER': 'postgres',
-        'PASSWORD': 'Max332628',
-        'HOST': '127.0.0.1',
-        'PORT': '5432',
+        'NAME': 'ops',
     }
 }
 
@@ -207,8 +207,17 @@ CORS_ALLOWED_ORIGINS = [
     "http://192.168.3.143",
     "http://192.168.3.143:8111",
     "http://localhost:3000",
+    "http://wicad-ops.witz.local:8111"
 ]
 CORS_ALLOW_CREDENTIALS = True
+
+CSRF_TRUSTED_ORIGINS = [
+    "http://92.118.114.27",
+    "http://192.168.3.143",
+    "http://192.168.3.143:8111",
+    "http://localhost:3000",
+    "http://wicad-ops.witz.local:8111"
+]
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
@@ -235,22 +244,22 @@ TIME_ZONE = 'Asia/Yekaterinburg'
 USE_I18N = True
 USE_TZ = True
 
-if IS_DEVELOPMENT:
-    STATIC_ROOT = BASE_PRJ_DIR / 'var' / 'static'
-    MEDIA_ROOT = BASE_PRJ_DIR / 'var' / 'media'
-elif IS_PRODUCTION_ANY:
-    STATIC_ROOT = f'/var/www/{APP_SYSNAME}/static'
-    MEDIA_ROOT = f'/var/www/{APP_SYSNAME}/media'
+if IS_PRODUCTION:
+    STATIC_ROOT = f"/var/www/{APP_SYSNAME}/static"
+    MEDIA_ROOT = f"/var/www/{APP_SYSNAME}/media"
+else:
+    STATIC_ROOT = BASE_PRJ_DIR / "var" / "static"
+    MEDIA_ROOT = BASE_PRJ_DIR / "var" / "media"
 
-STATIC_URL = 'static/'
-MEDIA_URL = 'media/'
+STATIC_URL = "static/"
+MEDIA_URL = "media/"
 
 STATICFILES_DIRS = [BASE_APP_DIR / "static-common"]
 
-if IS_PRODUCTION_ANY:
-    LOG_PREFIX = f'/var/log/{APP_SYSNAME}'
+if IS_PRODUCTION:
+    LOG_PREFIX = f"/var/log/{APP_SYSNAME}"
 else:
-    LOG_PREFIX = BASE_PRJ_DIR / 'var' / 'log'
+    LOG_PREFIX = BASE_PRJ_DIR / "var" / "log"
 
 # Логирование
 from .settings_logging import *  # noqa
@@ -300,16 +309,6 @@ ASGI_APPLICATION = 'project.asgi.application'
 #         },
 #     },
 # }
-
-
-CSRF_TRUSTED_ORIGINS = [
-    'http://46.161.52.221:8921',
-    'http://92.50.148.46',
-    'http://192.168.3.150',
-    'http://92.118.114.27',
-    'http://192.168.3.143',
-    'http://192.168.3.143:8111',
-]
 
 # app: bootstrap5
 BOOTSTRAP5 = {
