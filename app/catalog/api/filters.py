@@ -26,7 +26,7 @@ LoadGroupFilter = create_filterset(LoadGroup, {
     'kn': lookups.INTEGER_LOOKUPS,
 })
 
-DEFAULT_INSULATED_TEMP = config.TEMPERATURE_WITH_INSULATION
+DEFAULT_INSULATED_TEMP = 1
 MaterialFilter = create_filterset(Material, {
     'name': lookups.STRING_LOOKUPS,
     'name_ru': lookups.STRING_LOOKUPS,

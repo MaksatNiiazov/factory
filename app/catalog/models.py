@@ -30,12 +30,19 @@ class CatalogMixin(models.Model):
 
 
 class Directory(SoftDeleteModelMixin, models.Model):
-    name = models.CharField(max_length=255, verbose_name=_('Название'))
-    display_name_template = models.TextField(blank=True, default='', verbose_name=_('Шаблон отображения'))
+    name = models.CharField(max_length=255, verbose_name=_("Название"))
+    display_name_template = models.TextField(blank=True, default="", verbose_name=_("Шаблон отображения"))
 
     class Meta:
-        verbose_name = _('Справочник')
-        verbose_name_plural = _('Справочники')
+        verbose_name = _("Кастомный справочник")
+        verbose_name_plural = _("Кастомные справочники")
+        default_permissions = ()
+        permissions = (
+            ("add_directory", _("Может создавать кастомные справочники")),
+            ("change_directory", _("Может изменять кастомные справочники")),
+            ("delete_directory", _("Может удалять кастомные справочники")),
+            ("view_directory", _("Может просматривать кастомные справочники")),
+        )
 
     def save(self, *args, **kwargs):
         old_instance = None
@@ -61,14 +68,21 @@ class Directory(SoftDeleteModelMixin, models.Model):
 
 class DirectoryField(SoftDeleteModelMixin, models.Model):
     directory = models.ForeignKey(
-        Directory, on_delete=models.CASCADE, related_name='fields', verbose_name=_('Справочник')
+        Directory, on_delete=models.CASCADE, related_name="fields", verbose_name=_("Справочник")
     )
-    name = models.CharField(max_length=255, verbose_name=_('Название поля'))
-    field_type = models.CharField(max_length=10, choices=FieldTypeChoices.choices, verbose_name=_('Тип поля'))
+    name = models.CharField(max_length=255, verbose_name=_("Название поля"))
+    field_type = models.CharField(max_length=10, choices=FieldTypeChoices.choices, verbose_name=_("Тип поля"))
 
     class Meta:
-        verbose_name = _('Поле в справочнике')
-        verbose_name_plural = _('Поля в справочнике')
+        verbose_name = _("Поле в кастомном справочнике")
+        verbose_name_plural = _("Поля в кастомном справочнике")
+        default_permissions = ()
+        permissions = (
+            ("add_directoryfield", _("Может добавлять поля в кастомный справочник")),
+            ("change_directoryfield", _("Может изменять поля в кастомном справочнике")),
+            ("delete_directoryfield", _("Может удалять поля в кастомном справочнике")),
+            ("view_directoryfield", _("Может просматривать поля в кастомном справочнике")),
+        )
 
     def __str__(self):
         return f'{self.directory.name} -> {self.name} ({self.field_type})'
@@ -76,19 +90,25 @@ class DirectoryField(SoftDeleteModelMixin, models.Model):
 
 class DirectoryEntry(SoftDeleteModelMixin, models.Model):
     directory = models.ForeignKey(
-        Directory, on_delete=models.CASCADE, related_name='entries', verbose_name=_('Справочник')
+        Directory, on_delete=models.CASCADE, related_name="entries", verbose_name=_("Справочник")
     )
     display_name = models.CharField(
-        max_length=255, blank=True, default="", verbose_name=_('Отображаемое имя')
+        max_length=255, blank=True, default="", verbose_name=_("Отображаемое имя")
     )
-    display_name_errors = ReadableJSONField(blank=True, default=list, verbose_name=_('Ошибки при генерации имени'))
+    display_name_errors = ReadableJSONField(blank=True, default=list, verbose_name=_("Ошибки при генерации имени"))
 
     class Meta:
-        verbose_name = _('Запись в справочнике')
-        verbose_name_plural = _('Записи в справочнике')
+        verbose_name = _("Запись в кастомном справочнике")
+        verbose_name_plural = _("Записи в кастомном справочнике")
+        default_permissions = ()
+        permissions = (
+            ("add_directoryentry", _("Может добавлять записи в кастомный справочник")),
+            ("change_directoryentry", _("Может изменять записи в кастомном справочнике")),
+            ("delete_directoryentry", _("Может удалять записи в кастомном справочнике")),
+            ("view_directoryentry", _("Может просматривать записи в кастомном справочнике")),
+        )
 
     def refresh_display_name(self):
-        from .models import DirectoryEntryValue
         env = get_jinja2_env()
 
         context = {}
@@ -112,22 +132,29 @@ class DirectoryEntry(SoftDeleteModelMixin, models.Model):
 
 
 class DirectoryEntryValue(SoftDeleteModelMixin, models.Model):
-    entry = models.ForeignKey(DirectoryEntry, on_delete=models.CASCADE, related_name='values', verbose_name='Запись')
+    entry = models.ForeignKey(DirectoryEntry, on_delete=models.CASCADE, related_name="values", verbose_name="Запись")
     directory_field = models.ForeignKey(
-        DirectoryField, on_delete=models.CASCADE, related_name='values', verbose_name=_('Поле')
+        DirectoryField, on_delete=models.CASCADE, related_name="values", verbose_name=_("Поле")
     )
 
-    int_value = models.IntegerField(null=True, blank=True, verbose_name=_('Целое число'))
-    float_value = models.FloatField(null=True, blank=True, verbose_name=_('Вещественное число'))
-    str_value = models.CharField(null=True, blank=True, verbose_name=_('Строка'))
-    bool_value = models.BooleanField(null=True, blank=True, verbose_name=_('Логическое значение'))
+    int_value = models.IntegerField(null=True, blank=True, verbose_name=_("Целое число"))
+    float_value = models.FloatField(null=True, blank=True, verbose_name=_("Вещественное число"))
+    str_value = models.CharField(null=True, blank=True, verbose_name=_("Строка"))
+    bool_value = models.BooleanField(null=True, blank=True, verbose_name=_("Логическое значение"))
 
     class Meta:
-        verbose_name = _('Значение поля')
-        verbose_name_plural = _('Значения полей')
+        verbose_name = _("Значение поля в записи кастомного справочника")
+        verbose_name_plural = _("Значения полей в записях кастомного справочника")
+        default_permissions = ()
+        permissions = (
+            ("add_directoryentryvalue", _("Может добавлять значения полей в записи кастомного справочника")),
+            ("change_directoryentryvalue", _("Может изменять значения полей в записи кастомного справочника")),
+            ("delete_directoryentryvalue", _("Может удалять значения полей в записи кастомного справочника")),
+            ("view_directoryentryvalue", _("Может просматривать значения полей в записи кастомного справочника")),
+        )
 
     def __str__(self):
-        return f'Value for field {self.directory_field.name} in entry {self.entry.id}'
+        return f"{self.entry.display_name} -> {self.directory_field.name} ({self.value})"
 
     def clean(self):
         super().clean()
@@ -192,103 +219,130 @@ class DirectoryEntryValue(SoftDeleteModelMixin, models.Model):
 
 
 class NominalDiameter(CatalogMixin, SoftDeleteModelMixin, models.Model):
-    dn = models.PositiveSmallIntegerField(verbose_name=_('Номинальный диаметр'), unique=True)
+    dn = models.PositiveSmallIntegerField(verbose_name=_("Номинальный диаметр"), unique=True)
 
-    historylog = HistoryModelTracker(excluded_fields=('id',), root_model='self', root_id=lambda ins: ins.id)
+    historylog = HistoryModelTracker(excluded_fields=("id",), root_model="self", root_id=lambda ins: ins.id)
 
     def __str__(self):
-        return f'DN{self.dn}'
+        return f"DN{self.dn}"
 
     class Meta:
-        verbose_name = _('Номинальный диаметр')
-        verbose_name_plural = _('Номинальные диаметры')
-        ordering = ['dn']
-
+        verbose_name = _("Номинальный диаметр")
+        verbose_name_plural = _("Номинальные диаметры")
+        ordering = ["dn"]
+        default_permissions = ()
+        permissions = (
+            ("add_nominaldiameter", _("Может добавлять записи в справочник номинальных диаметров")),
+            ("change_nominaldiameter", _("Может изменять записи в справочник номинальных диаметров")),
+            ("delete_nominaldiameter", _("Может удалять записи в справочник номинальных диаметров")),
+            ("view_nominaldiameter", _("Может просматривать записи в справочник номинальных диаметров")),
+        )
 
 class PipeDiameter(CatalogMixin, SoftDeleteModelMixin, models.Model):
     class Option(models.IntegerChoices):
-        DN_A = 1, _('А')
-        DN_B = 2, _('Б')
-        DN_V = 3, _('В')
-        __empty__ = '--------'
+        DN_A = 1, _("А")
+        DN_B = 2, _("Б")
+        DN_V = 3, _("В")
+        __empty__ = "--------"
 
-    dn = models.ForeignKey(NominalDiameter, verbose_name=_('Номинальный диаметр'), on_delete=models.PROTECT)
+    dn = models.ForeignKey(NominalDiameter, verbose_name=_("Номинальный диаметр"), on_delete=models.PROTECT)
     option = models.PositiveSmallIntegerField(
-        verbose_name=_('Исполнение'), choices=Option.choices, null=True, blank=True
+        verbose_name=_("Исполнение"), choices=Option.choices, null=True, blank=True
     )
-    standard = models.PositiveSmallIntegerField(verbose_name=_('Стандарт'), choices=Standard.choices)
-    size = models.FloatField(verbose_name=_('Фактический размер, мм'), validators=[MinValueValidator(0.0)])
+    standard = models.PositiveSmallIntegerField(verbose_name=_("Стандарт"), choices=Standard.choices)
+    size = models.FloatField(verbose_name=_("Фактический размер, мм"), validators=[MinValueValidator(0.0)])
 
-    historylog = HistoryModelTracker(excluded_fields=('id',), root_model='self', root_id=lambda ins: ins.id)
+    historylog = HistoryModelTracker(excluded_fields=("id",), root_model="self", root_id=lambda ins: ins.id)
 
     @property
     def erp_display_name(self):
-        return f'{self.dn.dn}{self.get_option_display()}' if self.option else f'{self.dn.dn}'
+        return f"{self.dn.dn}{self.get_option_display()}" if self.option else f"{self.dn.dn}"
 
     def __str__(self):
-        return f'DN{self.dn.dn}({self.get_option_display()}) (Размер={self.size} мм)' if self.option else f'DN{self.dn.dn} (Размер={self.size} мм)'
+        return f"DN{self.dn.dn}({self.get_option_display()}) (Размер={self.size} мм)" if self.option else f"DN{self.dn.dn} (Размер={self.size} мм)"
 
     objects = PipeDiameterSoftDeleteManager()
     all_objects = PipeDiameterAllObjectsManager()
 
     class Meta:
-        verbose_name = _('Номинальный диаметр трубы')
-        verbose_name_plural = _('Номинальные диаметры труб')
-        ordering = ['standard', 'dn']
+        verbose_name = _("Номинальный диаметр трубы")
+        verbose_name_plural = _("Номинальные диаметры труб")
+        ordering = ["standard", "dn"]
         constraints = [
-            models.UniqueConstraint(fields=('dn', 'option', 'standard'), name='unique_pipe_diameter'),
+            models.UniqueConstraint(fields=("dn", "option", "standard"), name="unique_pipe_diameter"),
         ]
+        default_permissions = ()
+        permissions = (
+            ("add_pipediameter", _("Может добавлять записи в справочник номинальных диаметров труб")),
+            ("change_pipediameter", _("Может изменять записи в справочник номинальных диаметров труб")),
+            ("delete_pipediameter", _("Может удалять записи в справочник номинальных диаметров труб")),
+            ("view_pipediameter", _("Может просматривать записи в справочник номинальных диаметров труб")),
+        )
 
 
 class LoadGroup(CatalogMixin, SoftDeleteModelMixin, models.Model):
-    lgv = models.IntegerField(verbose_name=_('LGV'))
-    kn = models.IntegerField(verbose_name=_('kN'))
+    lgv = models.IntegerField(verbose_name=_("LGV"))
+    kn = models.IntegerField(verbose_name=_("kN"))
 
-    historylog = HistoryModelTracker(excluded_fields=('id',), root_model='self', root_id=lambda ins: ins.id)
+    historylog = HistoryModelTracker(excluded_fields=("id",), root_model="self", root_id=lambda ins: ins.id)
 
     class Meta:
-        verbose_name = _('нагрузочная группа')
-        verbose_name_plural = _('нагрузочные группы')
+        verbose_name = _("Нагрузочная группа")
+        verbose_name_plural = _("Нагрузочные группы")
+        default_permissions = ()
+        permissions = (
+            ("add_loadgroup", _("Может добавлять записи в справочник нагрузочных групп")),
+            ("change_loadgroup", _("Может изменять записи в справочник нагрузочных групп")),
+            ("delete_loadgroup", _("Может удалять записи в справочник нагрузочных групп")),
+            ("view_loadgroup", _("Может просматривать записи в справочник нагрузочных групп")),
+        )
 
     def __str__(self):
-        return f'LGV={self.lgv} kN={self.kn}'
+        return f"LGV={self.lgv} kN={self.kn}"
 
 
 class Material(CatalogMixin, SoftDeleteModelMixin, models.Model):
-    name = models.CharField(max_length=255, null=True, blank=True, verbose_name=_('Наименование'))
-    group = models.CharField(max_length=32, verbose_name=_('Группа'))
+    name = models.CharField(max_length=255, null=True, blank=True, verbose_name=_("Наименование"))
+    group = models.CharField(max_length=32, verbose_name=_("Группа"))
 
     type = models.CharField(
-        max_length=1, choices=MaterialType.choices, null=True, blank=True, verbose_name=_('Тип материала'),
+        max_length=1, choices=MaterialType.choices, null=True, blank=True, verbose_name=_("Тип материала"),
     )
 
-    astm_spec = models.CharField(max_length=36, null=True, blank=True, verbose_name=_('Спецификация по стандарту ASTM'))
+    astm_spec = models.CharField(max_length=36, null=True, blank=True, verbose_name=_("Спецификация по стандарту ASTM"))
     asme_type = models.CharField(
-        max_length=36, null=True, blank=True, verbose_name=_('Тип материала по классификации ASME'),
+        max_length=36, null=True, blank=True, verbose_name=_("Тип материала по классификации ASME"),
     )
     asme_uns = models.CharField(
-        max_length=36, null=True, blank=True, verbose_name=_('Уникальный номер материала по классификации ASME'),
+        max_length=36, null=True, blank=True, verbose_name=_("Уникальный номер материала по классификации ASME"),
     )
 
-    source = models.CharField(max_length=255, null=True, blank=True, verbose_name=_('Стандарт'))
+    source = models.CharField(max_length=255, null=True, blank=True, verbose_name=_("Стандарт"))
 
-    min_temp = models.IntegerField(null=True, blank=True, verbose_name=_('Минимальная рабочая температура материала'))
-    max_temp = models.IntegerField(null=True, blank=True, verbose_name=_('Максимальная рабочая температура материала'))
+    min_temp = models.IntegerField(null=True, blank=True, verbose_name=_("Минимальная рабочая температура материала"))
+    max_temp = models.IntegerField(null=True, blank=True, verbose_name=_("Максимальная рабочая температура материала"))
     max_exhaust_gas_temp = models.IntegerField(
-        null=True, blank=True, verbose_name=_('Максимальная температура выхлопных газов'),
+        null=True, blank=True, verbose_name=_("Максимальная температура выхлопных газов"),
     )
 
     lz = models.FloatField(null=True, blank=True)
 
-    density = models.FloatField(null=True, blank=True, verbose_name=_('Плотность'))
-    spring_constant = models.FloatField(null=True, blank=True, verbose_name=_('Пружинная постоянная'))
-    rp0 = models.IntegerField(null=True, blank=True, verbose_name=_('Предел текучести'))
+    density = models.FloatField(null=True, blank=True, verbose_name=_("Плотность"))
+    spring_constant = models.FloatField(null=True, blank=True, verbose_name=_("Пружинная постоянная"))
+    rp0 = models.IntegerField(null=True, blank=True, verbose_name=_("Предел текучести"))
 
-    historylog = HistoryModelTracker(excluded_fields=('id',), root_model='self', root_id=lambda ins: ins.id)
+    historylog = HistoryModelTracker(excluded_fields=("id",), root_model="self", root_id=lambda ins: ins.id)
 
     class Meta:
-        verbose_name = _('Материал')
-        verbose_name_plural = _('Материалы')
+        verbose_name = _("Материал")
+        verbose_name_plural = _("Материалы")
+        default_permissions = ()
+        permissions = (
+            ("add_material", _("Может добавлять записи в справочник материалов")),
+            ("change_material", _("Может изменять записи в справочник материалов")),
+            ("delete_material", _("Может удалять записи в справочник материалов")),
+            ("view_material", _("Может просматривать записи в справочник материалов")),
+        )
 
     def is_stainless_steel(self) -> bool:
         """
@@ -333,6 +387,13 @@ class CoveringType(CatalogMixin, SoftDeleteModelMixin, models.Model):
         verbose_name = _('Тип покрытия')
         verbose_name_plural = _('Типы покрытий')
         ordering = ('numeric',)
+        default_permissions = ()
+        permissions = (
+            ("add_coveringtype", _("Может добавлять запись в справочник типов покрытий")),
+            ("change_coveringtype", _("Может изменять запись в справочник типов покрытий")),
+            ("delete_coveringtype", _("Может удалять запись в справочник типов покрытий")),
+            ("view_coveringtype", _("Может просматривать записи в справочник типов покрытий")),
+        )
 
     def __str__(self):
         return str(self.name)
@@ -345,9 +406,16 @@ class Covering(CatalogMixin, SoftDeleteModelMixin, models.Model):
     historylog = HistoryModelTracker(excluded_fields=('id',), root_model='self', root_id=lambda ins: ins.id)
 
     class Meta:
-        verbose_name = _('покрытие')
-        verbose_name_plural = _('покрытия')
+        verbose_name = _('Покрытие')
+        verbose_name_plural = _('Покрытия')
         ordering = ('name',)
+        default_permissions = ()
+        permissions = (
+            ("add_covering", _("Может добавлять запись в справочник покрытий")),
+            ("change_covering", _("Может изменять запись в справочник покрытий")),
+            ("delete_covering", _("Может удалять запись в справочник покрытий")),
+            ("view_covering", _("Может просматривать записи в справочник покрытий")),
+        )
 
     def __str__(self):
         return str(self.name)
@@ -357,24 +425,38 @@ class SupportDistance(CatalogMixin, SoftDeleteModelMixin, models.Model):
     """
     Справочник расстояний между опорами.
     """
-    name = models.CharField(max_length=255, verbose_name=_('Название'))
-    value = models.FloatField(verbose_name=_('Расстояние между опорами, мм'), validators=[MinValueValidator(0.0)])
+    name = models.CharField(max_length=255, verbose_name=_("Название"))
+    value = models.FloatField(verbose_name=_("Расстояние между опорами, мм"), validators=[MinValueValidator(0.0)])
 
     class Meta:
-        verbose_name = _('Расстояние между опорами')
-        verbose_name_plural = _('Расстояния между опорами')
-        ordering = ['value']
+        verbose_name = _("Расстояние между опорами")
+        verbose_name_plural = _("Расстояния между опорами")
+        ordering = ["value"]
+        default_permissions = ()
+        permissions = (
+            ("add_supportdistance", _("Может добавлять записи в справочник расстояний между опорами")),
+            ("change_supportdistance", _("Может изменять записи в справочник расстояний между опорами")),
+            ("delete_supportdistance", _("Может удалять записи в справочник расстояний между опорами")),
+            ("view_supportdistance", _("Может просматривать записи в справочник расстояний между опорами")),
+        )
 
     def __str__(self):
         return f"{self.name} ({self.value} мм)"
 
 
 class ProductClass(CatalogMixin, SoftDeleteModelMixin, models.Model):
-    name = models.CharField(max_length=255, verbose_name=_('Название'))
+    name = models.CharField(max_length=255, verbose_name=_("Название"))
 
     class Meta:
-        verbose_name = _('Класс изделия')
-        verbose_name_plural = _('Классы изделий')
+        verbose_name = _("Класс изделия")
+        verbose_name_plural = _("Классы изделий")
+        default_permissions = ()
+        permissions = (
+            ("add_productclass", _("Может добавлять записи в справочник классов изделий")),
+            ("change_productclass", _("Может изменять записи в справочник классов изделий")),
+            ("delete_productclass", _("Может удалять записи в справочник классов изделий")),
+            ("view_productclass", _("Может просматривать записи в справочник классов изделий")),
+        )
 
     def __str__(self):
         return self.name
@@ -385,22 +467,29 @@ class ProductFamily(CatalogMixin, SoftDeleteModelMixin, models.Model):
     Справочник семейства изделий.
     """
     product_class = models.ForeignKey(
-        ProductClass, on_delete=models.PROTECT, related_name='product_families', verbose_name=_('Класс изделия'),
+        ProductClass, on_delete=models.PROTECT, related_name="product_families", verbose_name=_("Класс изделия"),
     )
-    name = models.CharField(max_length=255, unique=True, verbose_name=_('Название семейства'))
-    icon = models.ImageField(upload_to="product_families/", null=True, blank=True, verbose_name=_('Иконка'))
+    name = models.CharField(max_length=255, unique=True, verbose_name=_("Название семейства"))
+    icon = models.ImageField(upload_to="product_families/", null=True, blank=True, verbose_name=_("Иконка"))
 
     is_upper_mount_selectable = models.BooleanField(
-        default=False, blank=True, verbose_name=_('Доступен выбор верхнего крепления'),
+        default=False, blank=True, verbose_name=_("Доступен выбор верхнего крепления"),
     )
     has_rod = models.BooleanField(
-        default=False, blank=True, verbose_name=_('Альтернативный расчет высоты за счет регулировки штока'),
+        default=False, blank=True, verbose_name=_("Альтернативный расчет высоты за счет регулировки штока"),
     )
 
     class Meta:
-        verbose_name = _('Семейство изделий')
-        verbose_name_plural = _('Семейства изделий')
-        ordering = ['name']
+        verbose_name = _("Семейство изделий")
+        verbose_name_plural = _("Семейства изделий")
+        ordering = ["name"]
+        default_permissions = ()
+        permissions = (
+            ("add_productfamily", _("Может добавлять записи в справочник семейств изделий")),
+            ("change_productfamily", _("Может изменять записи в справочник семейств изделий")),
+            ("delete_productfamily", _("Может удалять записи в справочник семейств изделий")),
+            ("view_productfamily", _("Может просматривать записи в справочник семейств изделий")),
+        )
 
     def __str__(self):
         return self.name
@@ -409,47 +498,68 @@ class ProductFamily(CatalogMixin, SoftDeleteModelMixin, models.Model):
 class Load(CatalogMixin, SoftDeleteModelMixin, models.Model):
     series_name = models.CharField(
         max_length=SeriesNameChoices.get_max_length(), choices=SeriesNameChoices.choices,
-        verbose_name=_('Наименование серии'),
+        verbose_name=_("Наименование серии"),
     )
-    size = models.PositiveIntegerField(verbose_name=_('Размер'))
-    rated_stroke_50 = models.PositiveIntegerField(verbose_name=_('Номинальный ход 50'))
-    rated_stroke_100 = models.PositiveIntegerField(verbose_name=_('Номинальный ход 100'))
-    rated_stroke_200 = models.PositiveIntegerField(verbose_name=_('Номинальный ход 200'))
-    load_group_lgv = models.PositiveIntegerField(verbose_name=_('Группа LGV'))
-    design_load = models.FloatField(verbose_name=_('Расчетная нагрузка'))
+    size = models.PositiveIntegerField(verbose_name=_("Размер"))
+    rated_stroke_50 = models.PositiveIntegerField(verbose_name=_("Номинальный ход 50"))
+    rated_stroke_100 = models.PositiveIntegerField(verbose_name=_("Номинальный ход 100"))
+    rated_stroke_200 = models.PositiveIntegerField(verbose_name=_("Номинальный ход 200"))
+    load_group_lgv = models.PositiveIntegerField(verbose_name=_("Группа LGV"))
+    design_load = models.FloatField(verbose_name=_("Расчетная нагрузка"))
 
     class Meta:
-        verbose_name = _('Нагрузка')
-        verbose_name_plural = _('Нагрузки')
+        verbose_name = _("Нагрузка")
+        verbose_name_plural = _("Нагрузки")
+        default_permissions = ()
+        permissions = (
+            ("add_load", _("Может добавлять записи в справочник нагрузок")),
+            ("change_load", _("Может изменять записи в справочник нагрузок")),
+            ("delete_load", _("Может удалять записи в справочник нагрузок")),
+            ("view_load", _("Может просматривать записи в справочник нагрузок")),
+        )
 
     def __str__(self):
-        return f'{self.series_name} | Size {self.size} | Load={self.design_load}'
+        return f"{self.series_name} | Size {self.size} | Load={self.design_load}"
 
 
 class SpringStiffness(CatalogMixin, SoftDeleteModelMixin, models.Model):
     series_name = models.CharField(
         max_length=SeriesNameChoices.get_max_length(), choices=SeriesNameChoices.choices,
-        verbose_name=_('Наименование серии'),
+        verbose_name=_("Наименование серии"),
     )
-    size = models.PositiveIntegerField(verbose_name=_('Размер'))
-    rated_stroke = models.PositiveIntegerField(verbose_name=_('Номинальный ход'))
-    value = models.FloatField(null=True, blank=True, verbose_name=_('Жесткость'))
+    size = models.PositiveIntegerField(verbose_name=_("Размер"))
+    rated_stroke = models.PositiveIntegerField(verbose_name=_("Номинальный ход"))
+    value = models.FloatField(null=True, blank=True, verbose_name=_("Жесткость"))
 
     class Meta:
-        verbose_name = _('Пружинная жесткость')
-        verbose_name_plural = _('Пружинные жесткости')
+        verbose_name = _("Пружинная жесткость")
+        verbose_name_plural = _("Пружинные жесткости")
+        default_permissions = ()
+        permissions = (
+            ("add_springstiffness", _("Может добавлять записи в справочник пружинных жесткостей")),
+            ("change_springstiffness", _("Может изменять записи в справочник пружинных жесткостей")),
+            ("delete_springstiffness", _("Может удалять записи в справочник пружинных жесткостей")),
+            ("view_springstiffness", _("Может просматривать записи в справочник пружинных жесткостей")),
+        )
 
     def __str__(self):
-        return f'{self.series_name} | Size {self.size} | Stroke={self.rated_stroke} | R{self.value}'
+        return f"{self.series_name} | Size {self.size} | Stroke={self.rated_stroke} | R{self.value}"
 
 
 class PipeMountingGroup(CatalogMixin, SoftDeleteModelMixin, models.Model):
-    name = models.CharField(max_length=255, verbose_name=_('Наименование'))
-    variants = models.ManyToManyField('ops.Variant', blank=True, related_name='+', verbose_name=_('Типы креплений'))
+    name = models.CharField(max_length=255, verbose_name=_("Наименование"))
+    variants = models.ManyToManyField("ops.Variant", blank=True, related_name="+", verbose_name=_("Типы креплений"))
 
     class Meta:
-        verbose_name = _('Группа креплений к трубе')
-        verbose_name_plural = _('Группы креплений к трубе')
+        verbose_name = _("Группа креплений к трубе")
+        verbose_name_plural = _("Группы креплений к трубе")
+        default_permissions = ()
+        permissions = (
+            ("add_pipemountinggroup", _("Может добавлять записи в справочник групп креплений к трубе")),
+            ("change_pipemountinggroup", _("Может изменять записи в справочник групп креплений к трубе")),
+            ("delete_pipemountinggroup", _("Может удалять записи в справочник групп креплений к трубе")),
+            ("view_pipemountinggroup", _("Может просматривать записи в справочник групп креплений к трубе")),
+        )
 
     def __str__(self):
         return self.name
@@ -457,26 +567,33 @@ class PipeMountingGroup(CatalogMixin, SoftDeleteModelMixin, models.Model):
 
 class PipeMountingRule(CatalogMixin, SoftDeleteModelMixin, models.Model):
     family = models.ForeignKey(
-        ProductFamily, on_delete=models.PROTECT, related_name='+', verbose_name=_('Семейство изделия')
+        ProductFamily, on_delete=models.PROTECT, related_name="+", verbose_name=_("Семейство изделия")
     )
-    num_spring_blocks = models.PositiveSmallIntegerField(verbose_name=_('Количество пружинных блоков'))
+    num_spring_blocks = models.PositiveSmallIntegerField(verbose_name=_("Количество пружинных блоков"))
     pipe_direction = models.CharField(
         max_length=PipeDirectionChoices.get_max_length(), choices=PipeDirectionChoices.choices,
-        verbose_name=_('Направление трубы')
+        verbose_name=_("Направление трубы")
     )
     pipe_mounting_groups = models.ManyToManyField(
-        PipeMountingGroup, blank=True, related_name='+', verbose_name=_('Группы креплений к трубе')
+        PipeMountingGroup, blank=True, related_name="+", verbose_name=_("Группы креплений к трубе")
     )
     mounting_groups_b = models.ManyToManyField(
-        PipeMountingGroup, blank=True, related_name='+', verbose_name=_('Группы крепления В')
+        PipeMountingGroup, blank=True, related_name="+", verbose_name=_("Группы крепления В")
     )
 
     class Meta:
-        verbose_name = _('Правило выбора крепления')
-        verbose_name_plural = _('Правила выбора креплений')
+        verbose_name = _("Правило выбора крепления")
+        verbose_name_plural = _("Правила выбора креплений")
+        default_permissions = ()
+        permissions = (
+            ("add_pipemountingrule", _("Может добавлять записи в справочник правил выбора креплений")),
+            ("change_pipemountingrule", _("Может изменять записи в справочник правил выбора креплений")),
+            ("delete_pipemountingrule", _("Может удалять записи в справочник правил выбора креплений")),
+            ("view_pipemountingrule", _("Может просматривать записи в справочник правил выбора креплений")),
+        )
 
     def __str__(self):
-        return f'{self.family} | {self.num_spring_blocks} ПБ | Труба {self.pipe_direction}'
+        return f"{self.family} | {self.num_spring_blocks} ПБ | Труба {self.pipe_direction}"
 
 
 class ComponentGroup(CatalogMixin, SoftDeleteModelMixin, models.Model):
@@ -497,6 +614,13 @@ class ComponentGroup(CatalogMixin, SoftDeleteModelMixin, models.Model):
         ]
         verbose_name = _('Группа компонентов')
         verbose_name_plural = _('Группы компонентов')
+        default_permissions = ()
+        permissions = (
+            ("add_componentgroup", _("Может добавлять записи в справочник групп компонентов")),
+            ("change_componentgroup", _("Может изменять записи в справочник групп компонентов")),
+            ("delete_componentgroup", _("Может удалять записи в справочник групп компонентов")),
+            ("view_componentgroup", _("Может просматривать записи в справочник групп компонентов")),
+        )
 
     def __str__(self):
         return f'{self.get_group_type_display()}'
@@ -504,85 +628,106 @@ class ComponentGroup(CatalogMixin, SoftDeleteModelMixin, models.Model):
 
 class SpringBlockFamilyBinding(CatalogMixin, models.Model):
     family = models.OneToOneField(
-        ProductFamily, on_delete=models.CASCADE, related_name='+', verbose_name=_('Семейство изделия'),
+        ProductFamily, on_delete=models.CASCADE, related_name="+", verbose_name=_("Семейство изделия"),
     )
     spring_block_types = models.ManyToManyField(
-        'ops.DetailType', related_name='+', verbose_name=_('Допустимые типы пружинных блоков'),
+        "ops.DetailType", related_name="+", verbose_name=_("Допустимые типы пружинных блоков"),
     )
 
     class Meta:
-        verbose_name = _('Связь семейства с типами пружинных блоков')
-        verbose_name_plural = _('Связи семейств с типами пружинных блоков')
+        verbose_name = _("Связь семейства с типами пружинных блоков")
+        verbose_name_plural = _("Связи семейств с типами пружинных блоков")
+        default_permissions = ()
+        permissions = (
+            ("add_springblockfamilybinding", _("Может добавлять запись в справочник связей семейств с типами пружинных блоков")),
+            ("change_springblockfamilybinding", _("Может изменять запись в справочник связей семейств с типами пружинных блоков")),
+            ("delete_springblockfamilybinding", _("Может удалять запись в справочник связей семейств с типами пружинных блоков")),
+            ("view_springblockfamilybinding", _("Может просматривать записи в справочник связей семейств с типами пружинных блоков")),
+        )
 
     def __str__(self):
-        return f'{self.family.name}'
+        return f"{self.family.name}"
 
 
 class SSBCatalog(CatalogMixin, models.Model):
-    fn = models.PositiveIntegerField(verbose_name=_('Номинальная нагрузка, kH'))
-    stroke = models.PositiveIntegerField(verbose_name=_('Ход, мм'))
-    f = models.PositiveIntegerField(verbose_name=_('F, мм'))
-    l = models.PositiveIntegerField(null=True, blank=True, verbose_name=_('L, мм'))
-    l1 = models.PositiveIntegerField(null=True, blank=True, verbose_name=_('L1, мм'))
-    l2_min = models.PositiveIntegerField(null=True, blank=True, verbose_name=_('L2 мин., мм'))
-    l2_max = models.PositiveIntegerField(null=True, blank=True, verbose_name=_('L2 макс., мм'))
-    l3_min = models.PositiveIntegerField(verbose_name=_('L3 мин., мм'))
-    l3_max = models.PositiveIntegerField(verbose_name=_('L3 макс., мм'))
-    l4 = models.PositiveIntegerField(verbose_name=_('L4, мм'))
-    a = models.PositiveIntegerField(verbose_name='A')
-    b = models.PositiveIntegerField(verbose_name='B')
-    h = models.PositiveIntegerField(verbose_name='H')
-    diameter_j = models.PositiveIntegerField(verbose_name='ØJ')
+    fn = models.PositiveIntegerField(verbose_name=_("Номинальная нагрузка, kH"))
+    stroke = models.PositiveIntegerField(verbose_name=_("Ход, мм"))
+    f = models.PositiveIntegerField(verbose_name=_("F, мм"))
+    l = models.PositiveIntegerField(null=True, blank=True, verbose_name=_("L, мм"))
+    l1 = models.PositiveIntegerField(null=True, blank=True, verbose_name=_("L1, мм"))
+    l2_min = models.PositiveIntegerField(null=True, blank=True, verbose_name=_("L2 мин., мм"))
+    l2_max = models.PositiveIntegerField(null=True, blank=True, verbose_name=_("L2 макс., мм"))
+    l3_min = models.PositiveIntegerField(verbose_name=_("L3 мин., мм"))
+    l3_max = models.PositiveIntegerField(verbose_name=_("L3 макс., мм"))
+    l4 = models.PositiveIntegerField(verbose_name=_("L4, мм"))
+    a = models.PositiveIntegerField(verbose_name="A")
+    b = models.PositiveIntegerField(verbose_name="B")
+    h = models.PositiveIntegerField(verbose_name="H")
+    diameter_j = models.PositiveIntegerField(verbose_name="ØJ")
 
     class Meta:
-        verbose_name = _('Гидроамортизатор SSB')
-        verbose_name_plural = _('Гидроамортизаторы SSB')
-        ordering = ['fn', 'stroke', 'l']
+        verbose_name = _("Гидроамортизатор SSB")
+        verbose_name_plural = _("Гидроамортизаторы SSB")
+        ordering = ["fn", "stroke", "l"]
+        default_permissions = ()
+        permissions = (
+            ("add_ssbcatalog", _("Может добавлять записи в каталог гидроамортизаторов SSB")),
+            ("change_ssbcatalog", _("Может изменять записи в каталог гидроамортизаторов SSB")),
+            ("delete_ssbcatalog", _("Может удалять записи в каталог гидроамортизаторов SSB")),
+            ("view_ssbcatalog", _("Может просматривать записи в каталог гидроамортизаторов SSB")),
+        )
 
     def __str__(self):
-        return f'SSB {self.fn:04d}.?.?'
+        return f"SSB {self.fn:04d}.?.?"
 
 class SSGCatalog(models.Model):
     """Каталог распорок SSG (номинальная нагрузка, диапазоны длины, тип конструкции и пр.)"""
 
-    fn = models.PositiveIntegerField(verbose_name=_('Номинальная нагрузка, кН'), blank=True, null=True)
+    fn = models.PositiveIntegerField(verbose_name=_("Номинальная нагрузка, кН"), blank=True, null=True)
 
     # Диапазон длины
-    l_min = models.PositiveIntegerField(verbose_name=_('Мин. длина L, мм'), blank=True, null=True)
-    l_max = models.PositiveIntegerField(verbose_name=_('Макс. длина L, мм'), blank=True, null=True)
+    l_min = models.PositiveIntegerField(verbose_name=_("Мин. длина L, мм"), blank=True, null=True)
+    l_max = models.PositiveIntegerField(verbose_name=_("Макс. длина L, мм"), blank=True, null=True)
 
     # Габариты
-    l1 = models.FloatField(verbose_name=_('Размер L1, мм'), blank=True, null=True)
-    l2 = models.FloatField(verbose_name=_('Размер L2, мм'), blank=True, null=True)
-    d = models.FloatField(verbose_name=_('Диаметр D, мм'), blank=True, null=True)
-    d1 = models.FloatField(verbose_name=_('Диаметр D1, мм'), blank=True, null=True)
-    r = models.FloatField(verbose_name=_('R (радиус/гиб), мм'), blank=True, null=True)
-    s = models.FloatField(verbose_name=_('Толщина S, мм'), blank=True, null=True)
-    sw = models.FloatField(verbose_name=_('Размер SW (под ключ), мм'), blank=True, null=True)
+    l1 = models.FloatField(verbose_name=_("Размер L1, мм"), blank=True, null=True)
+    l2 = models.FloatField(verbose_name=_("Размер L2, мм"), blank=True, null=True)
+    d = models.FloatField(verbose_name=_("Диаметр D, мм"), blank=True, null=True)
+    d1 = models.FloatField(verbose_name=_("Диаметр D1, мм"), blank=True, null=True)
+    r = models.FloatField(verbose_name=_("R (радиус/гиб), мм"), blank=True, null=True)
+    s = models.FloatField(verbose_name=_("Толщина S, мм"), blank=True, null=True)
+    sw = models.FloatField(verbose_name=_("Размер SW (под ключ), мм"), blank=True, null=True)
 
     # Поля, встречающиеся только у типа 2
-    h = models.FloatField(verbose_name=_('Толщина H, мм'), null=True, blank=True)
-    sw1 = models.FloatField(verbose_name=_('Размер SW1 (под ключ), мм'), null=True, blank=True)
-    sw2 = models.FloatField(verbose_name=_('Размер SW2 (под ключ), мм'), null=True, blank=True)
+    h = models.FloatField(verbose_name=_("Толщина H, мм"), null=True, blank=True)
+    sw1 = models.FloatField(verbose_name=_("Размер SW1 (под ключ), мм"), null=True, blank=True)
+    sw2 = models.FloatField(verbose_name=_("Размер SW2 (под ключ), мм"), null=True, blank=True)
 
     # Дополнительно
-    regulation = models.FloatField(verbose_name=_('Регулировка длины, мм'), blank=True, null=True)
-    fixed_part = models.FloatField(verbose_name=_('Фиксированная часть, кг'), null=True, blank=True)
-    delta_l = models.FloatField(verbose_name=_('ΔL, кг/м'), null=True, blank=True)
+    regulation = models.FloatField(verbose_name=_("Регулировка длины, мм"), blank=True, null=True)
+    fixed_part = models.FloatField(verbose_name=_("Фиксированная часть, кг"), null=True, blank=True)
+    delta_l = models.FloatField(verbose_name=_("ΔL, кг/м"), null=True, blank=True)
 
     # Тип распорки
     type = models.PositiveSmallIntegerField(
-        choices=((1, _('Тип 1')), (2, _('Тип 2'))),
-        verbose_name=_('Тип распорки'), blank=True, null=True
+        choices=((1, _("Тип 1")), (2, _("Тип 2"))),
+        verbose_name=_("Тип распорки"), blank=True, null=True
     )
 
     class Meta:
-        verbose_name = _('Распорка SSG (каталог)')
-        verbose_name_plural = _('Распорки SSG (каталог)')
-        ordering = ['type', 'fn']
+        verbose_name = _("Распорка SSG (каталог)")
+        verbose_name_plural = _("Распорки SSG (каталог)")
+        ordering = ["type", "fn"]
         constraints = [
-            models.UniqueConstraint(fields=['fn', 'type', 'l_min', 'l_max'], name='unique_ssg_variant')
+            models.UniqueConstraint(fields=["fn", "type", "l_min", "l_max"], name="unique_ssg_variant")
         ]
+        default_permissions = ()
+        permissions = (
+            ("add_ssgcatalog", _("Может добавлять записи в каталог распорок SSG")),
+            ("change_ssgcatalog", _("Может изменять записи в каталог распорок SSG")),
+            ("delete_ssgcatalog", _("Может удалять записи в каталог распорок SSG")),
+            ("view_ssgcatalog", _("Может просматривать записи в каталог распорок SSG")),
+        )
 
     def __str__(self):
         return f"SSG {self.fn} кН (Тип {self.type}, L: {self.l_min}-{self.l_max} мм)"
@@ -604,6 +749,13 @@ class ClampMaterialCoefficient(CatalogMixin, models.Model):
             models.F("temperature_from").asc(nulls_first=True),
             "temperature_to"
         ]
+        default_permissions = ()
+        permissions = (
+            ("add_clampmaterialcoefficient", _("Может добавлять записи в справочник коэффициентов материалов для хомутов")),
+            ("change_clampmaterialcoefficient", _("Может изменять записи в справочник коэффициентов материалов для хомутов")),
+            ("delete_clampmaterialcoefficient", _("Может удалять записи в справочник коэффициентов материалов для хомутов")),
+            ("view_clampmaterialcoefficient", _("Может просматривать записи в справочник коэффициентов материалов для хомутов")),
+        )
 
     def clean(self):
         super().clean()
@@ -661,6 +813,13 @@ class ClampSelectionEntry(models.Model):
         verbose_name = _("Запись таблицы собираемости")
         verbose_name_plural = _("Записи таблицы собираемости")
         ordering = ["matrix", "hanger_load_group", "clamp_load_group"]
+        default_permissions = ()
+        permissions = (
+            ("add_clampselectionentry", _("Может добавлять записи в справочник таблицы собираемости")),
+            ("change_clampselectionentry", _("Может изменять записи в справочник таблицы собираемости")),
+            ("delete_clampselectionentry", _("Может удалять записи в справочник таблицы собираемости")),
+            ("view_clampselectionentry", _("Может просматривать записи в справочник таблицы собираемости")),
+        )
 
     def __str__(self):
         return f"{self.hanger_load_group} ({self.clamp_load_group}) - {self.get_result_display()}"

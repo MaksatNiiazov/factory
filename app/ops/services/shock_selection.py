@@ -993,7 +993,7 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
                 f"Расчёт удлинителя: {l_cold} - ({l} + {l4} + {mounting_length}) = {extender_length}"
             )
 
-        result = {
+        return {
             'marking': marking,
             'stroke': stroke,
             'type': type_,
@@ -1009,36 +1009,6 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
             'l4': entry.l4,
             'l_final': l_final,
         }
-        catalog_fields = [
-            field.name for field in entry._meta.fields
-            if field.name not in {'id', 'l1', 'l2', 'l2_min', 'l2_max', 'l3_min', 'l3_max', 'l4', 'l_final'}
-        ]
-        for field_name in catalog_fields:
-            result[field_name] = getattr(entry, field_name)
-
-        # Build parameters similarly to how they are applied when creating an Item
-        parameters = {}
-        attributes = variant.get_attributes() if variant else []
-
-        print(attributes)
-
-        for attribute in attributes:
-            attr_key = attribute.name
-            print(attr_key)
-            if attr_key in result and result.get(attr_key) is not None:
-                value = result[attr_key]
-            elif attribute.default not in (None, ""):
-                value = attribute.convert(attribute.default)
-                # expose defaulted value in shock_result using snake_case key
-                result[attr_key] = value
-            else:
-                continue
-
-            parameters[attribute.name] = value
-
-        result['parameters'] = parameters
-
-        return result
 
     def get_parameters(self, available_options: Optional[Dict[str, Any]] = None) -> Tuple[Dict[str, Any], List[str]]:
         """

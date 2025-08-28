@@ -14,7 +14,7 @@ load_dotenv(dotenv_path=dotenv_path, encoding="utf-8")
 # Имя приложения в ОС - используется в путях к логам, временным файлам и т.д.
 APP_SYSNAME = 'ops'
 
-SECRET_KEY = os.getenv("SECRET_KEY")
+SECRET_KEY = 'asdashdbqkwuhb1li23nbl12iuhwey'
 
 IS_PRODUCTION = os.getenv("IS_PRODUCTION", "False") == "True"
 
@@ -102,8 +102,12 @@ WSGI_APPLICATION = 'project.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'ops',
+        'ENGINE': 'django.db.backends.postgresql_psycopg2',
+        'NAME': "wzn_2",
+        'USER': "postgres",
+        'PASSWORD': "Max332628",
+        'HOST': "localhost",
+        'PORT': "5432",
     }
 }
 
@@ -142,6 +146,8 @@ CONSTANCE_CONFIG = {
     'SSB_CATALOG_PARAM_KEY': ('catalog', 'Ключ в JSON-поле Item.parameters, где лежит список записей SSB-каталога'),
     'SSB_SN_MARGIN_COEF': (1.2, 'Коэффициент запаса хода для Sn (по умолчанию 1.2)'),
     'SSB_EXTRA_MARGIN_PERCENT': (0.1, 'Дополнительный запас для типа 1 в процентах (по умолчанию 10%)'),
+    "SVG_TEXT_FONT_PATH": ("Arial.ttf", "Шрифт текста в svg скетче"),
+    "SKETCH_IMAGE_TEXT_FONT_PATH": ("arial.ttf", "Шрифт текста в изображении скетча"),
 }
 
 CONSTANCE_CONFIG_FIELDSETS = {
@@ -154,7 +160,8 @@ CONSTANCE_CONFIG_FIELDSETS = {
         'SSB_CATALOG_PARAM_KEY',
         'SSB_SN_MARGIN_COEF',
         'SSB_EXTRA_MARGIN_PERCENT',
-    )
+    ),
+    "SKETCHES": ("SVG_TEXT_FONT_PATH", "SKETCH_IMAGE_TEXT_FONT_PATH"),
 }
 
 CRISPY_ALLOWED_TEMPLATE_PACKS = 'bootstrap5'

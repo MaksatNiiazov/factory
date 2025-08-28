@@ -6,15 +6,10 @@ from django.shortcuts import redirect
 from django.template.response import TemplateResponse
 from django.utils.translation import gettext_lazy as _
 
-from auditlog.models import LogEntry
-
 from import_export.admin import ImportMixin
 
 from rangefilter.filters import DateTimeRangeFilterBuilder
 
-from kernel.inlines import AuditLogInline
-
-from ops.api.exceptions import FormatNotSupported, ResourceNotFound
 from ops.models import (
     Project, DetailType, Item, ProjectItem, ItemChild, FieldSet, Attribute, Variant, BaseComposition, ERPSyncLog,
     ERPSync,
@@ -24,43 +19,6 @@ from ops.widgets import MarkingTemplateWidget
 from taskmanager.choices import TaskType
 from taskmanager.models import TaskAttachment, Task
 from ops.tasks import process_import_task
-
-
-class ProjectItemInline(admin.StackedInline):
-    model = ProjectItem
-    extra = 0
-    fieldsets = (
-        (None, {
-            'fields': ('position_number', 'original_item', 'customer_marking', 'count')
-        }),
-        (_('Нагрузка и перемещения'), {
-            'fields': (
-                'load_plus_x', 'load_plus_y', 'load_plus_z', 'load_minus_x', 'load_minus_y', 'load_minus_z',
-                'additional_load_x', 'additional_load_y', 'additional_load_z',
-                'move_plus_x', 'move_plus_y', 'move_plus_z', 'move_minus_x', 'move_minus_y', 'move_minus_z',
-                'estimated_state',
-            ),
-        }),
-        (_('Входные параметры пружины'), {'fields': ('minimum_spring_travel', 'tmp_spring')}),
-        (_('Данные трубы'), {
-            'fields': (
-                'pipe_location', 'pipe_direction', 'ambient_temperature', 'nominal_diameter',
-                'outer_diameter_special', 'insulation_thickness', 'span', 'clamp_material',
-                'insert', 'pipe_mount', 'top_mount'
-            ),
-        }),
-        (_('Технические требования'), {
-            'fields': ('technical_requirements', 'full_technical_requirements')
-        }),
-        (_('Данные с CRM'), {
-            'fields': (
-                'crm_id', 'crm_mark_cont', 'work_type',
-            )
-        }),
-        (_('Параметры подбора'), {
-            'fields': ('selection_params',),
-        }),
-    )
 
 
 @admin.register(Project)
@@ -85,7 +43,6 @@ class ProjectAdmin(admin.ModelAdmin):
         (_('Единицы измерения проекта'), {'fields': ('load_unit', 'move_unit', 'temperature_unit')}),
         (_('Важные даты'), {'fields': ('created', 'modified')}),
     )
-    inlines = (ProjectItemInline,)
 
 
 @admin.register(ProjectItem)

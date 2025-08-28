@@ -1,16 +1,15 @@
 import base64
-import os
 import re
 from datetime import date, datetime
 from io import BytesIO
 from collections import defaultdict, deque
 
 from PIL import Image, ImageDraw, ImageFont
+from constance import config
 from django.shortcuts import render
 from django.utils import timezone
 
 from ops.exceptions import TopologicalSortException
-from project.settings import BASE_PRJ_DIR
 from ops.models import DetailType, TemporaryComposition
 
 # Отношение пикселя к мм
@@ -140,7 +139,7 @@ def wrap_words(comment):
     # Конвертация размеров
     dpi = 72  # Стандартная плотность точек для SVG
     max_width_mm = 132
-    font_path = 'Arial.ttf'
+    font_path = config.SVG_TEXT_FONT_PATH
     font_size_pt = 8
     mm_per_pt = 0.3527
     font_size_mm = font_size_pt * mm_per_pt

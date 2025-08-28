@@ -1,3 +1,4 @@
+from django import forms
 from django.contrib import admin
 from django.contrib.auth.forms import (
     UserChangeForm as DefaultUserChangeForm,
@@ -26,6 +27,13 @@ class UserChangeForm(DefaultUserChangeForm):
         model = User
         fields = '__all__'
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        f = self.fields.get("user_permissions")
+
+        if f:
+            f.label_from_instance = lambda p: p.name
+
 
 class UserCreationForm(DefaultUserCreationForm):
     class Meta:
@@ -41,7 +49,7 @@ class UserAdmin(DefaultUserAdmin):
     search_fields = ('id', 'email', 'last_name', 'first_name', 'middle_name', 'organization__name', 'crm_login')
     autocomplete_fields = ('organization',)
     ordering = ('email',)
-    filter_vertical = ('user_permissions',)
+    filter_horizontal = ('user_permissions',)
 
     @admin.display(description=_('ФИО'), ordering='last_name')
     def full_name(self, instance):
@@ -78,9 +86,22 @@ class UserAdmin(DefaultUserAdmin):
             'all': ('custom_admin.css',),
         }
 
+class GroupChangeForm(forms.ModelForm):
+    class Meta:
+        model = Group
+        fields = '__all__'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        f = self.fields.get("permissions")
+
+        if f:
+            f.label_from_instance = lambda p: p.name
 
 class GroupAdmin(DefaultGroupAdmin):
-    filter_vertical = ('permissions',)
+    filter_horizontal = ('permissions',)
+
+    form = GroupChangeForm
 
     class Media:
         css = {
@@ -89,7 +110,7 @@ class GroupAdmin(DefaultGroupAdmin):
 
 
 admin.site.unregister(Group)
-admin.site.register(Group)
+admin.site.register(Group, GroupAdmin)
 
 
 @admin.register(ApiToken)

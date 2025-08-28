@@ -5,7 +5,7 @@ import traceback
 
 from collections import OrderedDict
 from datetime import datetime, date
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 from io import BytesIO
 from typing import Optional, Tuple, Type
 
@@ -92,15 +92,26 @@ class Project(SoftDeleteModelMixin, TimeStampedModel, models.Model):
     historylog = HistoryModelTracker(excluded_fields=('id',), root_model='self', root_id=lambda ins: ins.id)
 
     class Meta:
-        verbose_name = _('Проект')
-        verbose_name_plural = _('Проекты')
+        verbose_name = _("Проект")
+        verbose_name_plural = _("Проекты")
+        default_permissions = ()
         permissions = (
-            ('add_own_project', _('Может создавать свои проекты')),
-            ('change_own_project', _('Может изменить свои проекты')),
-            ('delete_own_project', _('Может удалить свои проекты')),
-            ('view_own_project', _('Может видеть свои проекты')),
-            ('import_project_crm', _('Может импортировать проект с CRM')),
-            ('sync_project_erp', _('Может синхронизировать проект в ERP')),
+            ("add_project", _("Может создавать проекты для любого пользователя")),
+            ("change_project", _("Может изменять проекты любого пользователя")),
+            ("delete_project", _("Может удалять проекты любого пользователя")),
+            ("view_project", _("Может видеть проекты любого пользователя")),
+            ("add_own_project", _("Может создавать проекты")),
+            ("change_own_project", _("Может изменить собственные проекты")),
+            ("delete_own_project", _("Может удалить собственные проекты")),
+            ("view_own_project", _("Может видеть собственные проекты")),
+
+            # org-scoped права
+            ("view_org_project", _("Может видеть проекты своей организации")),
+            ("change_org_project", _("Может изменять проекты своей организации")),
+            ("delete_org_project", _("Может удалять проекты своей организации")),
+
+            ("import_project_crm", _("Может импортировать проект с CRM")),
+            ("sync_project_erp", _("Может синхронизировать проект в ERP")),
         )
 
     def __str__(self):
@@ -255,8 +266,15 @@ class ProjectItem(SoftDeleteModelMixin, models.Model):
     historylog = HistoryModelTracker(excluded_fields=('id',), root_model='self', root_id=lambda ins: ins.id)
 
     class Meta:
-        verbose_name = _('табличная часть проекта')
-        verbose_name_plural = _('табличная часть проекта')
+        verbose_name = _("Табличная часть проекта")
+        verbose_name_plural = _("Табличная часть проекта")
+        default_permissions = ()
+        permissions = (
+            ("view_projectitem", _("Может просматривать табличную часть проекта")),
+            ("add_projectitem", _("Может добавлять элементы в табличную часть проекта")),
+            ("change_projectitem", _("Может изменять элементы табличной части проекта")),
+            ("delete_projectitem", _("Может удалять элементы из табличной части проекта")),
+        )
 
     @property
     def inner_marking(self):
@@ -360,8 +378,15 @@ class ProjectItemRevision(SoftDeleteModelMixin, models.Model):
     historylog = HistoryModelTracker(excluded_fields=('id',), root_model='self', root_id=lambda ins: ins.id)
 
     class Meta:
-        verbose_name = _('ревизия объекта')
-        verbose_name_plural = _('ревизии объектов')
+        verbose_name = _("Ревизия объекта")
+        verbose_name_plural = _("Ревизии объектов")
+        default_permissions = ()
+        permissions = (
+            ("view_projectitemrevision", _("Может просматривать ревизии объектов табличной части проекта")),
+            ("add_projectitemrevision", _("Может добавлять ревизии объектов табличной части проекта")),
+            ("change_projectitemrevision", _("Может изменять ревизии объектов табличной части проекта")),
+            ("delete_projectitemrevision", _("Может удалять ревизии объектов табличной части проекта")),
+        )
 
     def __str__(self):
         return f'{self.project_item} (#{self.id})'
@@ -407,11 +432,18 @@ class DetailType(SoftDeleteModelMixin, models.Model):
     technical_requirements = models.TextField(blank=True, null=True, verbose_name=_('Технические требования'))
 
     class Meta:
-        verbose_name = _('тип детали/изделия')
-        verbose_name_plural = _('типы деталей/изделии')
+        verbose_name = _("Тип детали/изделия")
+        verbose_name_plural = _("Типы деталей/изделии")
         constraints = [models.UniqueConstraint(
-            fields=['designation', 'category', 'branch_qty', 'deleted_at'], name='unique_detailtype'
+            fields=["designation", "category", "branch_qty", "deleted_at"], name="unique_detailtype"
         )]
+        default_permissions = ()
+        permissions = (
+            ('view_detailtype', _('Может просматривать типы деталей/изделий')),
+            ('add_detailtype', _('Может добавлять типы деталей/изделий')),
+            ('change_detailtype', _('Может изменять типы деталей/изделий')),
+            ('delete_detailtype', _('Может удалять типы деталей/изделий')),
+        )
 
     def __str__(self):
         return f'{self.designation} - {self.name}'
@@ -649,12 +681,19 @@ class Variant(SoftDeleteModelMixin, models.Model):
     historylog = HistoryModelTracker(excluded_fields=('id',), root_model='self', root_id=lambda ins: ins.id)
 
     class Meta:
+        verbose_name = _("исполнение")
+        verbose_name_plural = _("исполнения")
+        ordering = ("detail_type", "name")
         constraints = [
-            models.UniqueConstraint(fields=['deleted_at', 'name', 'detail_type'], name='unique_variant')
+            models.UniqueConstraint(fields=["deleted_at", "name", "detail_type"], name="unique_variant")
         ]
-        verbose_name = _('исполнение')
-        verbose_name_plural = _('исполнения')
-        ordering = ('detail_type', 'name')
+        default_permissions = ()
+        permissions = (
+            ("view_variant", _("Может просматривать исполнения")),
+            ("add_variant", _("Может добавлять исполнения")),
+            ("change_variant", _("Может изменять исполнения")),
+            ("delete_variant", _("Может удалять исполнения")),
+        )
 
     def get_base_compositions(self) -> QuerySet:
         """
@@ -735,7 +774,7 @@ class Variant(SoftDeleteModelMixin, models.Model):
 
         img_width, img_height = sketch_image.size
         font_size = max(12, int(img_height * 0.02))
-        font = ImageFont.truetype("arial.ttf", font_size)
+        font = ImageFont.truetype(config.SKETCH_IMAGE_TEXT_FONT_PATH, font_size)
 
         for coord in sketch_coords:
             attribute_id = coord.get('id')
@@ -822,8 +861,15 @@ class FieldSet(SoftDeleteModelMixin, models.Model):
     historylog = HistoryModelTracker(excluded_fields=('id',), root_model='self', root_id=lambda ins: ins.id)
 
     class Meta:
-        verbose_name = _('группа атрибутов')
-        verbose_name_plural = _('группы атрибутов')
+        verbose_name = _("группа атрибутов")
+        verbose_name_plural = _("группы атрибутов")
+        default_permissions = ()
+        permissions = (
+            ("view_fieldset", _("Может просматривать группы атрибутов")),
+            ("change_fieldset", _("Может изменять группы атрибутов")),
+            ("delete_fieldset", _("Может удалять группы атрибутов")),
+            ("add_fieldset", _("Может добавлять группы атрибутов")),
+        )
 
     def __str__(self):
         return str(self.label)
@@ -927,9 +973,40 @@ class Attribute(SoftDeleteModelMixin, models.Model):
     all_objects = AttributeAllObjectsManager()
 
     class Meta:
-        ordering = ['variant', 'position']
-        verbose_name = _('Атрибут')
-        verbose_name_plural = _('Атрибуты')
+        ordering = ["variant", "position"]
+        verbose_name = _("Атрибут")
+        verbose_name_plural = _("Атрибуты")
+        default_permissions = ()
+        permissions = (
+            ("view_attribute", _("Может просматривать атрибуты")),
+            ("change_attribute", _("Может изменять атрибуты")),
+            ("delete_attribute", _("Может удалять атрибуты")),
+            ("add_attribute", _("Может добавлять атрибуты")),
+        )
+
+    @staticmethod
+    def _to_float_or_none(x):
+        if x is None:
+            return None
+        if isinstance(x, str):
+            s = x.strip().replace(' ', '').replace(',', '.')
+            if s == '':
+                return None
+            try:
+                return float(s)
+            except ValueError:
+                try:
+                    return float(Decimal(s))
+                except (InvalidOperation, ValueError):
+                    raise
+        if isinstance(x, (int, float, Decimal)):
+            return float(x)
+        raise ValueError(f'Unsupported numeric value: {x!r}')
+
+    @staticmethod
+    def _to_int_or_none(x):
+        f = Attribute._to_float_or_none(x)
+        return None if f is None else int(f)
 
     def convert(self, value, field_name=None):
         current_type = self.TYPE_MAPPER[self.type]
@@ -969,36 +1046,39 @@ class Attribute(SoftDeleteModelMixin, models.Model):
                     )
         if current_type == int:
             try:
-                return int(float(value))
+                val = Attribute._to_int_or_none(value)
+                return val
             except Exception as exc:
-                raise ValidationError(
-                    {field_name: f'Не подходящее значение по-умолчанию для типа Целое число: {exc}'},
-                )
+                raise ValidationError({
+                    field_name: f'Не подходящее значение по-умолчанию для типа Целое число: {exc}'
+                })
+
         elif current_type == float:
             try:
-                val = float(value)
-
+                val = Attribute._to_float_or_none(value)
+                if val is None:
+                    return None
                 q = Decimal('1.00')
                 val = float(Decimal(str(val)).quantize(q, rounding=ROUND_HALF_UP))
 
                 return val
             except Exception as exc:
-                raise ValidationError(
-                    {field_name: f'Не подходящее значение по-умолчанию для типа Число: {exc}'},
-                )
+                raise ValidationError({
+                    field_name: f'Не подходящее значение по-умолчанию для типа Число: {exc}'
+                })
+
         elif current_type == bool:
-            if value == 'true':
+            if value is True or (isinstance(value, str) and value.lower() in ('true', '1', 'yes')):
                 return True
-            elif value == 'false':
+            if value is False or (isinstance(value, str) and value.lower() in ('false', '0', 'no')):
                 return False
-            else:
-                raise ValidationError(
-                    {
-                        field_name: f'Не подходящее значение по-умолчанию для типа Да/Нет. Необходимо указать: '
-                                    f'true или false',
-                    }
-                )
+            raise ValidationError({
+                field_name: 'Не подходящее значение по-умолчанию для типа Да/Нет. Необходимо указать: true/false'
+            })
+
         elif current_type == datetime:
+            if value in (None, ''):
+                return None
             try:
                 return datetime.fromisoformat(value)
             except Exception as exc:
@@ -1006,6 +1086,8 @@ class Attribute(SoftDeleteModelMixin, models.Model):
                     {field_name: f'Не подходящее значение по-умолчанию для типа Дата/Время: {exc}'},
                 )
         elif current_type == date:
+            if value in (None, ''):
+                return None
             try:
                 return date.fromisoformat(value)
             except Exception as exc:
@@ -1364,7 +1446,12 @@ class Item(SoftDeleteModelMixin, TimeStampedModel, models.Model):
             for attribute in attributes:
                 value, errors = self.calculate_attribute(attribute)
                 self.parameters[attribute.name] = value
-                self.parameters_errors.update(**errors)
+
+                if attribute.name in self.parameters_errors:
+                    del self.parameters_errors[attribute.name]
+
+                if errors:
+                    self.parameters_errors.update(errors)
 
     def update_auto_fields(self) -> None:
         """
@@ -1448,9 +1535,16 @@ class ERPSync(SoftDeleteModelMixin, models.Model):
     finished_at = models.DateTimeField(null=True, blank=True, verbose_name=_('Дата завершения'))
 
     class Meta:
-        verbose_name = _('ERP синхронизация')
-        verbose_name_plural = _('ERP синхронизации')
-        ordering = ['-created_at']
+        verbose_name = _("ERP синхронизация")
+        verbose_name_plural = _("ERP синхронизации")
+        ordering = ["-created_at"]
+        default_permissions = ()
+        permissions = (
+            ('view_erpsync', _('Может просматривать ERP синхронизации')),
+            ('change_erpsync', _('Может изменять ERP синхронизации')),
+            ('delete_erpsync', _('Может удалять ERP синхронизации')),
+            ('add_erpsync', _('Может добавлять ERP синхронизации')),
+        )
 
     def get_instance(self):
         if self.type == ERPSyncType.ITEM:
@@ -1505,9 +1599,16 @@ class ERPSyncLog(SoftDeleteModelMixin, models.Model):
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_('Дата создания'))
 
     class Meta:
-        verbose_name = _('Лог ERP синхронизации')
-        verbose_name_plural = _('Логи ERP синхронизации')
-        ordering = ['erp_sync', 'created_at']
+        verbose_name = _("Лог ERP синхронизации")
+        verbose_name_plural = _("Логи ERP синхронизации")
+        ordering = ["erp_sync", "created_at"]
+        default_permissions = ()
+        permissions = (
+            ("view_erpsynclog", _("Может просматривать логи ERP синхронизации")),
+            ("change_erpsynclog", _("Может изменять логи ERP синхронизации")),
+            ("delete_erpsynclog", _("Может удалять логи ERP синхронизации")),
+            ("add_erpsynclog", _("Может добавлять логи ERP синхронизации")),
+        )
 
     def __str__(self):
         return f'Log {self.id} for ERP Sync {self.erp_sync.id} - {self.get_log_type_display()}'
@@ -1524,14 +1625,19 @@ class ItemChild(SoftDeleteModelMixin, models.Model):
     historylog = HistoryModelTracker(excluded_fields=('id',), root_model='self', root_id=lambda ins: ins.id)
 
     class Meta:
-        verbose_name = _('Спецификация')
-        verbose_name_plural = _('Спепцификации')
-        ordering = ('parent', 'position')
+        verbose_name = _("Спецификация")
+        verbose_name_plural = _("Спепцификации")
+        ordering = ("parent", "position")
+        default_permissions = ()
         permissions = (
-            ('add_own_itemchild', _('Может создавать свою спецификацию')),
-            ('change_own_itemchild', _('Может изменить свою спецификацию')),
-            ('delete_own_itemchild', _('Может удалить свою спецификацию')),
-            ('view_own_itemchild', _('Может видеть свою спецификацию')),
+            ("add_itemchild", _("Может создавать любые спецификации любой изделия/детали/сборочной единицы")),
+            ("change_itemchild", _("Может изменять любые спецификации любой изделия/детали/сборочной единицы")),
+            ("delete_itemchild", _("Может удалять любые спецификации любой изделия/детали/сборочной единицы")),
+            ("view_itemchild", _("Может видеть любые спецификации любой изделия/детали/сборочной единицы")),
+            ("add_own_itemchild", _("Может создавать спецификацию для своего изделия/детали/сборочной единицы")),
+            ("change_own_itemchild", _("Может изменять спецификацию для своего изделия/детали/сборочной единицы")),
+            ("delete_own_itemchild", _("Может удалять спецификацию для своего изделия/детали/сборочной единицы")),
+            ("view_own_itemchild", _("Может видеть спецификацию для своего изделия/детали/сборочной единицы")),
         )
 
     def clean(self):
@@ -1580,9 +1686,16 @@ class BaseComposition(SoftDeleteModelMixin, models.Model):
     all_objects = BaseCompositionAllObjectsManager()
 
     class Meta:
-        verbose_name = _('Комплектующая базового состава')
-        verbose_name_plural = _('Комплектующие базового состава')
-        ordering = ('base_parent', 'position')
+        verbose_name = _("Комплектующая базового состава")
+        verbose_name_plural = _("Комплектующие базового состава")
+        ordering = ("base_parent", "position")
+        default_permissions = ()
+        permissions = (
+            ("view_basecomposition", _("Может просматривать базовые составы")),
+            ("change_basecomposition", _("Может изменять базовые составы")),
+            ("delete_basecomposition", _("Может удалять базовые составы")),
+            ("add_basecomposition", _("Может добавлять базовые составы")),
+        )
 
     def clean(self):
         if self.base_parent_variant and self.base_parent_variant.detail_type_id != self.base_parent_id:

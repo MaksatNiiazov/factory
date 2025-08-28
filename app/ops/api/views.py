@@ -37,7 +37,7 @@ from ops.api.filters import ProjectFilter, DetailTypeFilter, ItemFilter, Variant
     AttributeFilter
 from ops.api.permissions import (
     OwnActionPermission, ProjectItemPermission, ERPSyncPermission, ImportFromCRMPermission,
-    ProjectERPSyncPermission, ClonePermission,
+    ProjectERPSyncPermission, ClonePermission, ProjectOrgPermission,
 )
 from ops.api.serializers import (
     CalculateLoadSerializer, ProjectSerializer, DetailTypeSerializer, ItemSerializer, ProjectItemSerializer,
@@ -69,6 +69,7 @@ from taskmanager.api.serializers import TaskSerializer
 from taskmanager.choices import TaskType
 from taskmanager.models import Task, TaskAttachment
 from ops.services.spacer_selection import SpacerSelectionAvailableOptions
+
 User = get_user_model()
 
 logger = logging.getLogger(__file__)
@@ -85,7 +86,9 @@ class ProjectViewSet(CustomModelViewSet):
     """
     queryset = Project.objects.all()
     serializer_class = ProjectSerializer
-    permission_classes = [ImportFromCRMPermission | ProjectERPSyncPermission | OwnActionPermission | ActionPermission]
+    permission_classes = [
+        ImportFromCRMPermission | ProjectERPSyncPermission | OwnActionPermission | ProjectOrgPermission | ActionPermission
+    ]
     filter_backends = [DjangoFilterBackend, MappedOrderingFilter, SearchFilter]
     filterset_class = ProjectFilter
     ordering_fields = (
@@ -146,8 +149,21 @@ class ProjectViewSet(CustomModelViewSet):
 
         if self.request.user.has_perm("ops.view_project"):
             return queryset
-        elif self.request.user.has_perm("ops.view_own_project"):
-            return queryset.filter(owner=self.request.user)
+
+        filter_params = Q()
+
+        is_filtered = False
+
+        if self.request.user.has_perm("ops.view_own_project"):
+            is_filtered = True
+            filter_params |= Q(owner=self.request.user)
+
+        if self.request.user.has_perm("ops.view_org_project") and self.request.user.organization:
+            is_filtered = True
+            filter_params |= Q(organization=self.request.user.organization)
+
+        if is_filtered:
+            return queryset.filter(filter_params)
 
         return Project.objects.none()
 
@@ -370,23 +386,24 @@ class ProjectItemViewSet(CustomModelViewSet):
             return Response({
                 'detail': f'Некорретный selection_type: {selection_type}'
             }, status=400)
-        
+
         project_item = ProjectItem.objects.get(project_id=project_pk, pk=pk)
 
         if selection_type == 'product_selection':
             selection = ProductSelectionAvailableOptions(project_item)
         else:
             selection = ShockSelectionAvailableOptions(project_item)
-        
+
         available_options = selection.get_available_options()
         specifications = available_options.get('specification', [])
         parameters, locked_parameters = selection.get_parameters(available_options)
 
         if project_item.original_item:
-            item = selection.update_item(request.user, project_item.original_item, parameters, locked_parameters, specifications)
+            item = selection.update_item(request.user, project_item.original_item, parameters, locked_parameters,
+                                         specifications)
         else:
             item = selection.create_item(request.user, parameters, locked_parameters, specifications)
-        
+
         project_item.original_item = item
         project_item.save()
 
@@ -417,16 +434,10 @@ class ProjectItemViewSet(CustomModelViewSet):
 
         if export_format == "svg":
             content_type = "image/svg+xml"
-            try:
-                output, filename = render_sketch(request, project_item, composition_type="specification")
-            except Exception as exc:
-                raise ValidationError(str(exc))
+            output, filename = render_sketch(request, project_item, composition_type="specification")
         elif export_format == "pdf":
             content_type = "application/pdf"
-            try:
-                output, filename = render_sketch_pdf(project_item, request.user)
-            except Exception as exc:
-                raise ValidationError(str(exc))
+            output, filename = render_sketch_pdf(project_item, request.user)
         else:
             raise FormatNotSupported(f"Формат {export_format} не поддерживается. Доступные форматы: svg, pdf.")
 

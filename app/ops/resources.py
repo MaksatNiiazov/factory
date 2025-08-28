@@ -318,6 +318,34 @@ class Base(resources.ModelResource, metaclass=DehydrateMetaClass):
         elif column_name in getattr(self, 'allowed_parameter_fields', set()):
             obj.parameters[column_name] = value
 
+    def save_instance(self, instance, is_new, row, **kwargs):
+        dry_run = kwargs.get("dry_run")
+        using_transactions = kwargs.get("using_transactions")
+
+        try:
+            print(f"[DEBUG] save_instance(before): "
+                  f"id={getattr(instance, 'id', None)}, "
+                  f"is_new={is_new}, "
+                  f"variant={getattr(instance, 'variant', None)}, "
+                  f"parameters={getattr(instance, 'parameters', None)}, "
+                  f"dry_run={dry_run}, using_transactions={using_transactions}")
+        except Exception as e:
+            print(f"[DEBUG][save_instance(before)][ERROR] {e!r}")
+
+        super().save_instance(instance, is_new, row, **kwargs)
+
+        try:
+            if not dry_run and getattr(instance, 'pk', None):
+                fresh = Item.objects.get(pk=instance.pk)
+                params = getattr(fresh, 'parameters', {}) or {}
+                print(f"[DEBUG] save_instance(after): id={fresh.id}, "
+                      f"has_m={'m' in params}, m_val={params.get('m')!r}, "
+                      f"parameters={params}")
+            else:
+                print(f"[DEBUG] save_instance(after): dry_run={dry_run}, pk={getattr(instance, 'pk', None)}")
+        except Exception as e:
+            print(f"[DEBUG][save_instance(after)][ERROR] {e!r}")
+
     def after_import(self, dataset: Any, result: Any, using_transactions: bool, dry_run: bool, **kwargs):
         items = Item.objects.select_related('type').filter(Q(name__isnull=True) | Q(name=''))
         to_update = []

@@ -5,6 +5,39 @@ from kernel.api.permissions import ActionPermission
 DEFAULT_OWNER_FIELD = 'owner'
 
 
+class ProjectOrgPermission(ActionPermission):
+    """
+    Пользователь может взаимодействовать с проектом которые входит в организацию в котором он состоит.
+
+    Необходимые разрешения:
+
+    - list|retrieve - ops.view_org_project (Может видеть проекты своей организации)
+    - create - ops.add_own_project (Может создавать проекты)
+    - update - ops.change_org_project (Может изменять проекты своей организации)
+    - destroy - ops.delete_org_project (Может видеть проекты своей организации)
+    """
+
+    perms_map = {
+        "list": ["ops.view_org_project"],
+        "retrieve": ["ops.view_org_project"],
+        "create": ["ops.add_own_project"],
+        "update": ["ops.change_org_project"],
+        "partial_update": ["ops.change_org_project"],
+        "destroy": ["ops.delete_org_project"],
+    }
+
+    def has_object_permission(self, request, view, obj):
+        organization = obj.organization
+
+        if not organization:
+            return False
+
+        if request.user.organization != organization:
+            return False
+
+        return self.has_permission(request, view)
+
+
 class OwnActionPermission(ActionPermission):
     """
     Пользователь может взаимодействовать с объектами, в котором он владелец или автор, если присутствует такие разрешения:
