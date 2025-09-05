@@ -303,3 +303,6 @@ class BaseSelectionAvailableOptions:
             variants = variants.filter(id__in=parent_variants)
 
         return variants
+
+    def get_data_for_sketch(self):
+        raise NotImplementedError

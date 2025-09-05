@@ -1,6 +1,6 @@
 from collections import defaultdict, Counter
 from copy import copy
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 
 from catalog.models import SSGCatalog, PipeDiameter, SupportDistance, PipeMountingGroup, PipeMountingRule, Material
 from ops.api.serializers import VariantSerializer
@@ -60,7 +60,7 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
         if installation_length is not None:
             self.debug.append(f"#get_load_and_move: Указана монтажная длина: {installation_length} мм.")
 
-        # считаем монтажную длину как в амортизаторах: сумма INSTALLATION_SIZE у выбранных A/B
+        # считаем монтажную длину как в амортизаторах: сумма SYSTEM_HEIGHT у выбранных A/B
         mounting_length = self.get_mounting_length_from_items() or 0.0
         l_cold = (installation_length - mounting_length) if installation_length is not None else None
 
@@ -120,7 +120,7 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
             variant = item.variant
             if not variant:
                 continue
-            for attr in variant.get_attributes().filter(usage=AttributeUsageChoices.INSTALLATION_SIZE):
+            for attr in variant.get_attributes().filter(usage=AttributeUsageChoices.SYSTEM_HEIGHT):
                 value = item.parameters.get(attr.name)
                 if value:
                     try:
@@ -641,7 +641,7 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
             if item.variant.detail_type.product_family == self.get_product_family():
                 continue
 
-            for attribute in item.variant.get_attributes().filter(usage=AttributeUsageChoices.INSTALLATION_SIZE):
+            for attribute in item.variant.get_attributes().filter(usage=AttributeUsageChoices.SYSTEM_HEIGHT):
                 value = item.parameters.get(attribute.name)
                 if value:
                     mounting_length += float(value)
@@ -805,7 +805,7 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
                 "debug": self.debug,
                 "suitable_variant": None,
                 "spacer_result": None,
-                "specifications": [],
+                "specification": [],
                 "load_and_move": {
                     "load_types": self.get_available_load_types(),
                 },
@@ -840,7 +840,7 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
             "debug": self.debug,
             "suitable_variant": VariantSerializer(suitable_variant).data if suitable_variant else None,
             "spacer_result": result,
-            "specifications": specification,
+            "specification": specification,
             "load_and_move": {
                 "load_types": self.get_available_load_types(),
             },
@@ -896,3 +896,4 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
                     return False
 
         return True
+

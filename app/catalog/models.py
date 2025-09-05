@@ -823,3 +823,38 @@ class ClampSelectionEntry(models.Model):
 
     def __str__(self):
         return f"{self.hanger_load_group} ({self.clamp_load_group}) - {self.get_result_display()}"
+
+
+# TODO
+'''
+class WVDCatalog(CatalogMixin, models.Model):
+    """Каталог демпферов для хранения параметров расчета в проекте."""
+    Sh = models.PositiveIntegerField(verbose_name=_("Номинальный горизонтальный ход, мм"), blank=True, null=True)
+    Sv = models.PositiveIntegerField(verbose_name=_("Номинальный вертикальный ход, мм"), blank=True, null=True)
+    Sa = models.PositiveIntegerField(verbose_name=_("Номинальный угловой ход, град"), blank=True, null=True)
+    Fh = models.FloatField(verbose_name=_("Номинальная горизонтальная нагрузка, кН"), blank=True, null=True)
+    Fv = models.FloatField(verbose_name=_("Номинальная вертикальная нагрузка, кН"), blank=True, null=True)
+
+    # TODO
+    # m = models.FloatField(verbose_name=_("Вес, кг"), blank=True, null=True)
+
+    # Монтажная высота E
+    # Допуск монтажная высота E1
+    # Габарит основания A1
+    # Допуск габарит основания A1
+    # Присоединительный размер B
+    # Допуск присоединительный размер B1
+    # Диаметр отверстия d
+    # Допуск диаметр отверстия d1
+    # Толщина основания s
+    # Допуск толщина основания s1
+
+    class Meta:
+        verbose_name = _("Демпфер WVD")
+        verbose_name_plural = _("Демпферы WVD")
+        # ordering = ['fn', 'stroke', 'l']
+
+    def __str__(self):
+        return f"WVD {self.pk}"
+        # return f"SSG {self.fn} кН (Тип {self.type}, L: {self.l_min}-{self.l_max} мм)"
+'''

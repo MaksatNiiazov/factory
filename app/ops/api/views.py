@@ -1,5 +1,6 @@
 import copy
 import logging
+from collections import Counter
 from io import BytesIO
 
 from django.contrib.auth import get_user_model
@@ -46,8 +47,7 @@ from ops.api.serializers import (
     BaseCompositionSerializer, SelectionParamsSerializer, VariantWithDetailTypeSerializer, ShockCalcSerializer,
     ShockCalcResultSerializer, AvailableTopMountsRequestSerializer, TopMountVariantSerializer, AssemblyLengthSerializer,
     AvailableMountsRequestSerializer, MountingVariantSerializer, ShockSelectionParamsSerializer,
-    SpacerSelectionParamsSerializer, GetSketchSerializer,
-
+    SpacerSelectionParamsSerializer, GetSketchSerializer, WVDSelectionParamsSerializer
 )
 from ops.api.utils import get_extended_range, sum_mounting_sizes
 from ops.choices import ERPSyncType, AttributeUsageChoices, AttributeType
@@ -63,6 +63,7 @@ from ops.services.clone_utils import get_model_fields_for_clone, generate_unique
 from ops.services.product_selection import ProductSelectionAvailableOptions
 from ops.services.shock_calc_service import calculate_shock_block
 from ops.services.shock_selection import ShockSelectionAvailableOptions
+from ops.services.wvd_selection import WVDSelectionAvailableOptions, WVD_SELECTION_TYPE
 from ops.tasks import task_sync_erp, task_sync_project_to_erp, process_import_task
 from ops.utils import render_sketch
 from taskmanager.api.serializers import TaskSerializer
@@ -307,7 +308,7 @@ class ProjectItemViewSet(CustomModelViewSet):
 
         selection_type = request.query_params.get('selection_type', 'product_selection')
 
-        if selection_type not in ['product_selection', 'shock_selection', 'ssg_selection']:
+        if selection_type not in ['product_selection', 'shock_selection', 'ssg_selection', WVD_SELECTION_TYPE]:
             return Response({
                 'detail': f'Некорректный selection_type: {selection_type}'
             }, status=400)
@@ -319,6 +320,8 @@ class ProjectItemViewSet(CustomModelViewSet):
             params = ProductSelectionAvailableOptions.get_default_params()
         elif selection_type == 'ssg_selection':
             params = SpacerSelectionAvailableOptions.get_default_params()
+        elif selection_type == WVD_SELECTION_TYPE:
+            params = WVDSelectionAvailableOptions.get_default_params()
         else:
             params = ShockSelectionAvailableOptions.get_default_params()
 
@@ -332,20 +335,20 @@ class ProjectItemViewSet(CustomModelViewSet):
 
         selection_type = request.query_params.get('selection_type', 'product_selection')
 
-        if selection_type not in ['product_selection', 'shock_selection', 'ssg_selection']:
+        if selection_type not in ['product_selection', 'shock_selection', 'ssg_selection', WVD_SELECTION_TYPE]:
             return Response({
-                'detail': f'Некорретный selection_type: {selection_type}'
+                'detail': f'Некорректный selection_type: {selection_type}'
             }, status=400)
 
         if selection_type == 'product_selection':
             selection_params_serializer = SelectionParamsSerializer(data=data)
-            selection_params_serializer.is_valid(raise_exception=True)
         elif selection_type == 'ssg_selection':
             selection_params_serializer = SpacerSelectionParamsSerializer(data=data)
-            selection_params_serializer.is_valid(raise_exception=True)
+        elif selection_type == WVD_SELECTION_TYPE:
+            selection_params_serializer = WVDSelectionParamsSerializer(data=data)
         else:
             selection_params_serializer = ShockSelectionParamsSerializer(data=data)
-            selection_params_serializer.is_valid(raise_exception=True)
+        selection_params_serializer.is_valid(raise_exception=True)
 
         project_item.selection_params = selection_params_serializer.data
         project_item.save()
@@ -359,9 +362,9 @@ class ProjectItemViewSet(CustomModelViewSet):
     def get_selection_options(self, request, project_pk, pk):
         selection_type = request.query_params.get('selection_type', 'product_selection')
 
-        if selection_type not in ['product_selection', 'shock_selection', 'ssg_selection']:
+        if selection_type not in ['product_selection', 'shock_selection', 'ssg_selection', WVD_SELECTION_TYPE]:
             return Response({
-                'detail': f'Некорретный selection_type: {selection_type}'
+                'detail': f'Некорректный selection_type: {selection_type}'
             }, status=400)
 
         project_item = ProjectItem.objects.get(project_id=project_pk, pk=pk)
@@ -370,10 +373,132 @@ class ProjectItemViewSet(CustomModelViewSet):
             available_options = ProductSelectionAvailableOptions(project_item).get_available_options()
         elif selection_type == 'ssg_selection':
             available_options = SpacerSelectionAvailableOptions(project_item).get_available_options()
+        elif selection_type == WVD_SELECTION_TYPE:
+            available_options = WVDSelectionAvailableOptions(project_item).get_available_options()
         else:
             available_options = ShockSelectionAvailableOptions(project_item).get_available_options()
 
         return Response(available_options)
+
+    def _validate_spec_against_base(self, variant_id: int, specifications: list):
+        """
+        Проверяет, покрывается ли спецификация базовым составом варианта.
+        Правило: сначала расходуем specific-слоты (type+variant), затем generic-слоты по типу.
+        Возвращает (ok: bool, mismatches: list[dict]).
+        """
+        if not variant_id or not specifications:
+            return True, []
+
+        variant = Variant.objects.filter(id=variant_id).first()
+        if not variant:
+            return True, []
+
+        # слоты из базового состава
+        specific = Counter()  # (type_id, variant_id) -> count
+        generic = Counter()  # type_id -> count
+        for bc in BaseComposition.objects.filter(base_parent_variant=variant):
+            cnt = bc.count or 1
+            t_id = bc.base_child_id
+            v_id = bc.base_child_variant_id
+            if not t_id:
+                continue
+            if v_id:
+                specific[(t_id, v_id)] += cnt
+            else:
+                generic[t_id] += cnt
+
+        # требования из спецификации
+        item_ids = [r.get('item') or r.get('item_id') for r in specifications if (r.get('item') or r.get('item_id'))]
+        items_map = {
+            i.id: i
+            for i in Item.objects.filter(id__in=item_ids).only('id', 'type_id', 'variant_id')
+        }
+
+        mismatches = []
+        for row in specifications:
+            item_id = row.get('item') or row.get('item_id')
+            need = int(row.get('count') or 1)
+            it = items_map.get(item_id)
+            if not it or need <= 0:
+                continue
+
+            t_id = it.type_id
+            v_id = getattr(it, 'variant_id', None)
+
+            # тратим specific
+            use_specific = min(need, specific.get((t_id, v_id), 0))
+            need -= use_specific
+            if use_specific:
+                specific[(t_id, v_id)] -= use_specific
+
+            # остаток тратим generic
+            if need > 0:
+                use_generic = min(need, generic.get(t_id, 0))
+                need -= use_generic
+                if use_generic:
+                    generic[t_id] -= use_generic
+
+            if need > 0:
+                mismatches.append({
+                    'item_id': item_id,
+                    'type_id': t_id,
+                    'variant_id': v_id,
+                    'lack': need,
+                    'reason': 'Недостаточно слотов в базовом составе (specific+generic)',
+                })
+
+        return (len(mismatches) == 0), mismatches
+
+    def _exists_variant_with_exact_base(self, specifications: list) -> bool:
+        """
+        True, если есть Variant, чей базовый состав ТОЧНО равен спецификации (multiset по (type_id, variant_id)->count).
+        """
+        from collections import Counter
+        from django.db.models import Sum
+
+        if not specifications:
+            return False
+
+        # нормализуем спецификацию
+        item_ids = [r.get('item') or r.get('item_id') for r in specifications if (r.get('item') or r.get('item_id'))]
+        items = Item.objects.filter(id__in=item_ids).only('id', 'type_id', 'variant_id')
+        items_map = {i.id: i for i in items}
+
+        spec_counter = Counter()
+        for row in specifications:
+            item_id = row.get('item') or row.get('item_id')
+            need = int(row.get('count') or 1)
+            it = items_map.get(item_id)
+            if not it or need <= 0:
+                continue
+            spec_counter[(it.type_id, getattr(it, 'variant_id', None))] += need
+
+        if not spec_counter:
+            return False
+
+        total_parts = sum(spec_counter.values())
+        candidate_ids = (
+            BaseComposition.objects
+            .values('base_parent_variant')
+            .annotate(total=Sum('count'))
+            .filter(total=total_parts)
+            .values_list('base_parent_variant', flat=True)
+        )
+        if not candidate_ids:
+            return False
+
+        variants = Variant.objects.filter(id__in=candidate_ids).only('id')
+        for v in variants:
+            base_counter = Counter()
+            for bc in BaseComposition.objects.filter(base_parent_variant=v).only('base_child_id',
+                                                                                 'base_child_variant_id', 'count'):
+                if not bc.base_child_id:
+                    continue
+                base_counter[(bc.base_child_id, bc.base_child_variant_id)] += (bc.count or 1)
+            if base_counter == spec_counter:
+                return True
+
+        return False
 
     @action(methods=['POST'], detail=True)
     def update_item(self, request: Request, project_pk: int, pk: int) -> Response:
@@ -382,21 +507,40 @@ class ProjectItemViewSet(CustomModelViewSet):
         """
         selection_type = request.query_params.get('selection_type', 'product_selection')
 
-        if selection_type not in ['product_selection', 'shock_selection']:
+        if selection_type not in ['product_selection', 'shock_selection', WVD_SELECTION_TYPE]:
             return Response({
-                'detail': f'Некорретный selection_type: {selection_type}'
+                'detail': f'Некорректный selection_type: {selection_type}'
             }, status=400)
 
         project_item = ProjectItem.objects.get(project_id=project_pk, pk=pk)
 
         if selection_type == 'product_selection':
             selection = ProductSelectionAvailableOptions(project_item)
+        elif selection_type == WVD_SELECTION_TYPE:
+            selection = WVDSelectionAvailableOptions(project_item)
         else:
             selection = ShockSelectionAvailableOptions(project_item)
 
         available_options = selection.get_available_options()
         specifications = available_options.get('specification', [])
         parameters, locked_parameters = selection.get_parameters(available_options)
+
+        if selection_type == 'shock_selection':
+            variant_id = (available_options or {}).get('suitable_variant', {}).get('id')
+
+            ok, mismatches = self._validate_spec_against_base(variant_id, specifications)
+            if not ok:
+                return Response({
+                    'detail': 'Спецификация не покрывается базовым составом выбранного варианта.',
+                    'variant_id': variant_id,
+                    'mismatches': mismatches,
+                }, status=400)
+
+            if not self._exists_variant_with_exact_base(specifications):
+                return Response({
+                    'detail': 'Не найден Variant (DetailType/изделие) с точно таким базовым составом, как в спецификации. '
+                              'Сохранение отменено.'
+                }, status=400)
 
         if project_item.original_item:
             item = selection.update_item(request.user, project_item.original_item, parameters, locked_parameters,
@@ -437,7 +581,7 @@ class ProjectItemViewSet(CustomModelViewSet):
             output, filename = render_sketch(request, project_item, composition_type="specification")
         elif export_format == "pdf":
             content_type = "application/pdf"
-            output, filename = render_sketch_pdf(project_item, request.user)
+            output, filename = render_sketch_pdf(project_item, request.user, composition_type="specification")
         else:
             raise FormatNotSupported(f"Формат {export_format} не поддерживается. Доступные форматы: svg, pdf.")
 
@@ -476,6 +620,7 @@ class ProjectItemViewSet(CustomModelViewSet):
                 output, filename = render_sketch_pdf(
                     project_item, request.user, field_name="subsketch",
                     coords_field_name="subsketch_coords",
+                    composition_type="specification",
                 )
             except Exception as exc:
                 raise ValidationError(str(exc))

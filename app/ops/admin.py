@@ -134,20 +134,20 @@ class VariantInline(nested_admin.NestedStackedInline):
 
 @admin.register(DetailType)
 class DetailTypeAdmin(nested_admin.NestedModelAdmin):
-    list_display = ('id', 'product_family', 'designation', 'category', 'branch_qty')
-    list_display_links = ('id',)
-    list_filter = ('category',)
-    search_fields = ('id', 'product_family__name', 'designation')
-    autocomplete_fields = ('product_family',)
-    readonly_fields = ('id',)
+    list_display = ("id", "product_family", "designation", "category", "branch_qty")
+    list_display_links = ("id",)
+    list_filter = ("category",)
+    search_fields = ("id", "product_family__name", "designation")
+    autocomplete_fields = ("product_family",)
+    readonly_fields = ("id",)
     fieldsets = (
         (None,
          {
-             'fields': (
-                 'id', 'product_family', 'name', 'designation', 'category', 'branch_qty', 'technical_requirements',
+             "fields": (
+                 "id", "product_family", "name", "designation", "category", "branch_qty", "technical_requirements",
              )
          }),
-        ('ERP', {'fields': ('short_name_to_erp',)})
+        ("ERP", {"fields": ("short_name_to_erp",)})
     )
     inlines = (AttributeInline, VariantInline)
 

@@ -67,7 +67,7 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
                 continue
             attributes = variant.get_attributes()
             for attr in attributes:
-                if attr.usage == AttributeUsageChoices.INSTALLATION_SIZE:
+                if attr.usage == AttributeUsageChoices.SYSTEM_HEIGHT:
                     value = item.parameters.get(attr.name)
                     if value:
                         try:
@@ -901,7 +901,7 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
             attributes = item.variant.get_attributes()
             for attribute in attributes:
-                if attribute.usage == AttributeUsageChoices.INSTALLATION_SIZE:
+                if attribute.usage == AttributeUsageChoices.SYSTEM_HEIGHT:
                     value = item.parameters.get(attribute.name)
                     if value:
                         mounting_length += float(value)
@@ -1034,7 +1034,7 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
                 'debug': self.debug,
                 'suitable_variant': None,
                 'shock_result': None,
-                'specifications': [],
+                'specification': [],
                 'load_and_move': {
                     'load_types': self.get_available_load_types(),
                 },
@@ -1091,7 +1091,7 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
             },
             'suitable_variant': VariantSerializer(suitable_variant).data if suitable_variant else None,
             'shock_result': shock_result,
-            'specifications': specification,
+            'specification': specification,
         }
 
         return available_options

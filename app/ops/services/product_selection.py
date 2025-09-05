@@ -1,5 +1,6 @@
 import copy
 from decimal import Decimal, ROUND_HALF_UP
+from math import isfinite
 from typing import Optional, List, Dict, Any, Tuple
 
 from django.db.models import Q, QuerySet, OuterRef, Exists, Count, Sum
@@ -597,7 +598,7 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
         self.debug.append(f'#Выбор крепления к трубе: Температура 1: {temp1}, Температура 2: {temp2}')
 
         # Введенная нагрузка
-        load = self.get_load_minus_z()
+        load = self.get_load_minus_z() / self.get_selected_branch_counts()
         self.debug.append(f'#Выбор крепления к трубе: Введенная нагрузка: {load}')
 
         # Группа материалов
@@ -752,10 +753,14 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
             if not filtered_pipe_clamps.exists():
                 continue
 
-            filtered_zom_items = zom_items.filter(parameters__LGV__in=load_group_ids).exclude(parameters__LGV2__isnull=False).exists()
-            self.debug.append(f'#Выбор крепления к трубе: Найдено переходников: {filtered_zom_items}')
+            filtered_zom_items = zom_items.filter(
+                Q(parameters__LGV__in=load_group_ids) & (
+                    Q(parameters__LGV2=None) | ~Q(parameters__has_key="LGV2")
+                )
+            )
+            self.debug.append(f'#Выбор крепления к трубе: Найдено переходников: {filtered_zom_items.count()}')
 
-            if filtered_zom_items:
+            if filtered_zom_items.exists():
                 found_item_ids.extend(filtered_pipe_clamps.values_list('id', flat=True))
 
         adapter_required_entries = matrix.entries.filter(hanger_load_group=lgv, result='adapter_required')
@@ -1479,12 +1484,12 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
         items_for_specification.append(pipe_mount_item)
 
-        variants = self.filter_suitable_variants_via_child(variants, pipe_mount_item)
+        variants = self.filter_suitable_variants_via_child(variants, pipe_mount_item, count=1)
 
         if zom:
             items_for_specification.append(zom)
 
-            variants = self.filter_suitable_variants_via_child(variants, zom)
+            variants = self.filter_suitable_variants_via_child(variants, zom, count=branch_qty)
 
         top_mount = self.get_selected_top_mount_id()
         product_family = self.get_selected_product_family()
@@ -1499,7 +1504,7 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
             top_mount_item = Item.objects.get(id=top_mount)
             items_for_specification.append(top_mount_item)
 
-            variants = self.filter_suitable_variants_via_child(variants, top_mount_item)
+            variants = self.filter_suitable_variants_via_child(variants, top_mount_item, count=1)
 
         if not variants.exists():
             self.debug.append('#Поиск DetailType: Не найдено ни одного подходящего исполнения.')
@@ -1759,21 +1764,21 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
             debug_specification.append({
                 'id': self.params['pipe_clamp']['pipe_mount'],
                 'position': None,
-                'count': 1,
+                'count': self.params["pipe_options"]["branch_qty"],
             })
 
             if zom:
                 debug_specification.append({
                     'id': zom.id,
                     'position': None,
-                    'count': 1,
+                    'count': self.params["pipe_options"]["branch_qty"],
                 })
 
         if self.params['pipe_clamp']['top_mount']:
             debug_specification.append({
                 'id': self.params['pipe_clamp']['top_mount'],
                 'position': None,
-                'count': 1,
+                'count': self.params["pipe_options"]["branch_qty"],
             })
 
         available_options = {
@@ -1796,3 +1801,132 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
         }
 
         return available_options
+
+    def get_data_for_sketch(self) -> Dict[str, Any]:
+        def _num(x, ndigits: Optional[int] = None):
+            if x is None:
+                return None
+            try:
+                v = float(x)
+                if not isfinite(v):
+                    return None
+                if ndigits is None:
+                    return v
+                return round(v, ndigits)
+            except Exception:
+                return None
+
+        def _int(x):
+            v = _num(x)
+            return int(v) if v is not None else None
+
+        def _or0(x):
+            v = _num(x)
+            return v if v is not None else 0.0
+
+        temp1, temp2 = self.get_temperatures()
+        pipe_d = self.get_pipe_diameter()
+        od_manual = self.params["pipe_params"]["outer_diameter_special"]
+        ins_thk = self.params["pipe_params"]["insulation_thickness"] or 0
+        branch_qty = self.get_selected_branch_counts()
+
+        move = self.params["load_and_move"]
+        load_plus_x = _or0(move.get("load_plus_x"))
+        load_plus_y = _or0(move.get("load_plus_y"))
+        load_plus_z = _or0(move.get("load_plus_z"))
+        load_minus_x = _or0(move.get("load_minus_x"))
+        load_minus_y = _or0(move.get("load_minus_y"))
+        load_minus_z = _or0(move.get("load_minus_z"))
+
+        add_x = _or0(move.get("additional_load_x"))
+        add_y = _or0(move.get("additional_load_y"))
+        add_z = _or0(move.get("additional_load_z"))
+
+        test_x = _num(move.get("test_load_x"))
+        test_y = _num(move.get("test_load_y"))
+        test_z = _num(move.get("test_load_z"))
+
+        mov_px = _or0(move.get("move_plus_x"))
+        mov_py = _or0(move.get("move_plus_y"))
+        mov_pz = _or0(move.get("move_plus_z"))
+        mov_mx = _or0(move.get("move_minus_x"))
+        mov_my = _or0(move.get("move_minus_y"))
+        mov_mz = _or0(move.get("move_minus_z"))
+
+        load_plus_x += add_x
+        load_plus_y += add_y
+        load_plus_z += add_z
+        load_minus_x += add_x
+        load_minus_y += add_y
+        load_minus_z += add_z
+
+        spring = self.get_selected_spring_block()
+
+        spring_name = spring.get("name")
+        spring_size = spring.get("size")
+        spring_stiffness = _num(spring.get("spring_stiffness"))
+        spring_rated_stroke = _num(spring.get("rated_stroke"))
+        load_cold = _num(spring.get("load_minus"))
+        load_hot = _num(spring.get("hot_design_load"))
+        load_initial = _num(spring.get("spring_stiffness"))
+
+        od_effective = _num(od_manual) if od_manual is not None else (_num(pipe_d.size) if pipe_d else None)
+        dn_print = f"DN {int(pipe_d.size)}" if pipe_d and _num(pipe_d.size) is not None else "-"
+
+        up_travel_left = spring["up_range"]
+        down_travel_left = spring["down_range"]
+
+        spring_stiffness_n_per_mm = spring_stiffness
+
+        return {
+            "pipe": {
+                "dn_text": dn_print,  # DN трубы
+                "outer_diameter_mm": _num(od_effective, 1),  # Диам. трубы
+                "insulation_thickness_mm": ins_thk,  # Толщ. изол.
+                "medium_temperature_c_1": _num(temp1, 1),  # Темп. среды (1)
+                "medium_temperature_c_2": _num(temp2, 1),  # (2) если заполнено
+                "slope_angle_deg": 0,  # Угол наклона
+            },
+            "movement_mm": {
+                "x_plus": _num(mov_px, 1),
+                "x_minus": _num(mov_mx, 1),
+                "y_plus": _num(mov_py, 1),
+                "y_minus": _num(mov_my, 1),
+                "z_plus": _num(mov_pz, 1),
+                "z_minus": _num(mov_mz, 1),
+            },
+            "loads_kN": {
+                "x_plus": _num(load_plus_x, 3),
+                "x_minus": _num(load_minus_x, 3),
+                "y_plus": _num(load_plus_y, 3),
+                "y_minus": _num(load_minus_y, 3),
+                "z_plus": _num(load_plus_z, 3),
+                "z_minus": _num(load_minus_z, 3),
+            },
+            "test_loads_kN": {
+                "x": _num(test_x, 3),
+                "y": _num(test_y, 3),
+                "z": _num(test_z, 3),
+            },
+            "chain_weight_kN": 0,
+            "additional_weight_kN": 0,
+            "spring_block": {
+                "hot_load_kN": _num(load_hot, 3),  # Горяч. напр.
+                "cold_load_kN": _num(load_cold, 3),  # Холод. напр.
+                "stiffness_N_per_mm": spring_stiffness_n_per_mm,  # Жестк. пруж.: N/мм
+                "series": spring_name,
+                "size": spring_size,
+                "rated_stroke_mm": spring_rated_stroke,
+                "initial_load_kN": _num(load_initial, 3),
+            },
+            "spring_travel_reserve_mm": {
+                "up": up_travel_left,  # вверх
+                "down": down_travel_left  # вниз
+            },
+            # Диапаз. рег-ки
+            "regulation_range_mm": None,
+            # Отклон. от Z [°]
+            "deviation_from_Z_deg": None,
+            # Справочная мета
+            "estimated_state": self.params["load_and_move"].get("estimated_state"),
+        }

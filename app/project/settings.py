@@ -20,7 +20,7 @@ IS_PRODUCTION = os.getenv("IS_PRODUCTION", "False") == "True"
 
 DEBUG = not IS_PRODUCTION
 
-ALLOWED_HOSTS = ["127.0.0.1", "localhost", "92.118.114.27", "192.168.3.143", "wicad-ops.witz.local"]
+ALLOWED_HOSTS = ["127.0.0.1", "localhost", "92.118.114.27", "192.168.3.143", "wicad-ops.witz.local", "92.50.148.46"]
 
 # app: django.contrib.sites
 SITE_ID = 1
@@ -211,6 +211,8 @@ SWAGGER_SETTINGS = {
 CORS_ALLOWED_ORIGINS = [
     "http://92.118.114.27",
     "http://92.118.114.27:8111",
+    "http://92.50.148.46",
+    "http://92.50.148.46:8111",
     "http://192.168.3.143",
     "http://192.168.3.143:8111",
     "http://localhost:3000",
@@ -222,6 +224,8 @@ CSRF_TRUSTED_ORIGINS = [
     "http://92.118.114.27",
     "http://192.168.3.143",
     "http://192.168.3.143:8111",
+    "http://92.50.148.46",
+    "http://92.50.148.46:8111",
     "http://localhost:3000",
     "http://wicad-ops.witz.local:8111"
 ]

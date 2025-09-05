@@ -136,7 +136,8 @@ class ProjectItemSerializer(CleanSerializerMixin, FlexFieldsModelSerializer):
             'id', 'position_number', 'original_item', 'customer_marking', 'count', 'revisions',
             'load_plus_x', 'load_plus_y', 'load_plus_z', 'load_minus_x', 'load_minus_y', 'load_minus_z',
             'additional_load_x', 'additional_load_y', 'additional_load_z',
-            'move_plus_x', 'move_plus_y', 'move_plus_z', 'move_minus_x', 'move_minus_y', 'move_minus_z',
+            'move_plus_x', 'move_plus_y', 'move_plus_z', 'move_plus_d',
+            'move_minus_x', 'move_minus_y', 'move_minus_z', 'move_minus_d',
             'estimated_state', 'minimum_spring_travel', 'pipe_location', 'pipe_direction', 'ambient_temperature',
             'nominal_diameter', 'outer_diameter_special', 'insulation_thickness',
             'span', 'clamp_material', 'insert',
@@ -205,13 +206,13 @@ class VariantSerializer(CleanSerializerMixin, FlexFieldsModelSerializer):
     class Meta:
         model = Variant
         fields = (
-            'id', 'name', 'marking_template', 'sketch', 'sketch_coords',
-            'subsketch', 'subsketch_coords', 'attributes', 'deleted_at',
-            'formula_weight', 'formula_height', 'series',
+            "id", "name", "icon", "marking_template", "sketch", "sketch_coords",
+            "subsketch", "subsketch_coords", "attributes", "deleted_at",
+            "formula_weight", "formula_height", "series",
         )
         read_only_fields = ('attributes',)
         expandable_fields = {
-            'attributes': ('ops.api.serializers.AttributeSerializer', {'many': True}),
+            "attributes": ("ops.api.serializers.AttributeSerializer", {"many": True}),
         }
 
 
@@ -229,7 +230,14 @@ class DetailTypeSerializer(CleanSerializerMixin, FlexFieldsModelSerializer):
     class Meta:
         model = DetailType
         fields = (
-            'id', 'product_family', 'name', 'designation', 'category', 'variants', 'branch_qty', 'technical_requirements',
+            "id",
+            "product_family",
+            "name",
+            "designation",
+            "category",
+            "variants",
+            "branch_qty",
+            "technical_requirements",
         )
         extra_kwargs = {
             'variants': {'read_only': True},
@@ -611,4 +619,41 @@ class AssemblyLengthSerializer(serializers.Serializer):
         child=serializers.IntegerField(),
         allow_empty=True,
         help_text="Список ID верхних креплений B"
+    )
+
+
+class WVDSelectionLoadAndMoveSerializer(serializers.Serializer):
+    load_plus_x = serializers.FloatField(required=False)
+    load_plus_y = serializers.FloatField(required=False)
+
+    load_minus_x = serializers.FloatField(required=False)
+    load_minus_y = serializers.FloatField(required=False)
+
+    move_plus_x = serializers.FloatField(required=False)
+    move_plus_y = serializers.FloatField(required=False)
+    move_plus_d = serializers.FloatField(required=False)
+
+    move_minus_x = serializers.FloatField(required=False)
+    move_minus_y = serializers.FloatField(required=False)
+    move_minus_d = serializers.FloatField(required=False)
+
+
+class WVDSelectionParamsSerializer(serializers.Serializer):
+    """Сериализатор селектора WVDSelectionAvailableOptions."""
+    product_class = serializers.PrimaryKeyRelatedField(
+        queryset=ProductClass.objects.all(),
+        required=True,
+        allow_null=True,
+    )
+    product_family = serializers.PrimaryKeyRelatedField(
+        queryset=ProductFamily.objects.all(),
+        required=True,
+        allow_null=True,
+    )
+    load_and_move = WVDSelectionLoadAndMoveSerializer(required=True)
+    variant = serializers.PrimaryKeyRelatedField(
+        queryset=Variant.objects.all(), required=True, allow_null=True,
+    )
+    selected_assembly_unit = serializers.PrimaryKeyRelatedField(
+        queryset=Item.objects.all(), required=True, allow_null=True,
     )

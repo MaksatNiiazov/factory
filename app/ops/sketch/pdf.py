@@ -6,6 +6,8 @@ import pytz
 from django.contrib.staticfiles import finders
 from fpdf import FPDF
 
+from catalog.models import Material
+from ops.choices import AttributeUsageChoices, AttributeCatalog
 from ops.models import TemporaryComposition, DetailType
 from ops.utils import work_with_image, calculate_image_position
 
@@ -24,12 +26,15 @@ def get_witzenmann_logo():
 
 
 def get_comment(project_item):
-    comment = project_item.comment
+    comment = ""
 
-    if comment:
-        return comment.strip()
+    if project_item.technical_requirements:
+        comment += project_item.technical_requirements.strip() + "\n"
 
-    return ''
+    if project_item.full_technical_requirements:
+        comment += project_item.full_technical_requirements.strip()
+
+    return comment.strip()
 
 
 def get_specification_position(obj):
@@ -43,7 +48,7 @@ def get_specification_count(obj):
 
 
 def get_specification_name(obj):
-    name = obj.name
+    name = obj.child.name
 
     if name:
         return name.strip()
@@ -52,21 +57,36 @@ def get_specification_name(obj):
 
 
 def get_specification_material(obj):
-    material = obj.material
+    material_attribute = obj.child.variant.get_attributes().filter(catalog=AttributeCatalog.MATERIAL).first()
+
+    if not material_attribute:
+        return ""
+
+    material_id = obj.child.parameters.get(material_attribute.name)
+
+    if material_id:
+        material = Material.objects.filter(id=material_id).first()
+    else:
+        return ""
 
     if material:
-        return str(obj.material)
-
-    return ''
+        return str(material)
+    else:
+        return f"Материал id={material_id} не найден"
 
 
 def get_specification_weight(obj):
-    weight = obj.weight
+    weight_attribute = obj.child.variant.get_attributes().filter(usage=AttributeUsageChoices.SYSTEM_WEIGHT).first()
 
-    if not weight:
-        return ''
+    if not weight_attribute:
+        return ""
 
-    return str(round(weight, 2))
+    weight = obj.child.parameters.get(weight_attribute.name)
+
+    if weight:
+        return str(round(weight, 2))
+    else:
+        return ""
 
 
 def get_nominal_diameter(project_item):
@@ -227,7 +247,7 @@ def get_weight(project_item):
         return ''
 
 
-def draw_specifications(pdf, project_item):
+def draw_specifications(pdf, project_item, composition_type):
     pdf.set_font('ArialNarrow', size=9)
 
     x_start = 225
@@ -271,7 +291,10 @@ def draw_specifications(pdf, project_item):
     pdf.set_xy(x_start + 174, y_start - 4)
     pdf.multi_cell(0, 3, get_weight(project_item))
 
-    composition_objects = TemporaryComposition.objects.filter(tmp_parent=project_item.original_item)
+    if composition_type == "temporary_composition":
+        composition_objects = TemporaryComposition.objects.filter(tmp_parent=project_item.original_item)
+    else:
+        composition_objects = project_item.original_item.children.all()
 
     for index, obj in enumerate(composition_objects):
         line_minus = 5 * (index + 2)
@@ -301,10 +324,14 @@ def draw_specifications(pdf, project_item):
         pdf.set_xy(x_start + 162, y_start - line_minus + 1)
         pdf.multi_cell(0, 3, '')
         pdf.set_xy(x_start + 174, y_start - line_minus + 1)
+        pdf.multi_cell(0, 3, get_specification_weight(obj))
 
 
 def draw_attributes(pdf, project_item, created_by, created_date):
     pdf.set_font('ArialNarrow', size=9)
+
+    available_selection = project_item.get_available_selection()
+    data_for_sketch = available_selection.get_data_for_sketch()
 
     x_start = 225
     y_start = 206
@@ -321,28 +348,48 @@ def draw_attributes(pdf, project_item, created_by, created_date):
     pdf.cell(0, 10, 'Примечания:')
 
     pdf.set_xy(x_start + 125, y_start)
-    pdf.cell(0, 10, f'Расчетное состояние: {project_item.get_estimated_state_display()}')
+
+    estimated_state = data_for_sketch["estimated_state"]
+
+    if estimated_state == "hot":
+        estimated_state_str = "Горячая нагрузка"
+    elif estimated_state == "cold":
+        estimated_state_str = "Холодная нагрузка"
+    else:
+        estimated_state_str = ""
+
+    pdf.cell(0, 10, f'Расчетное состояние: {estimated_state_str}')
 
     pdf.set_xy(x_start, y_start + 5)
-    pdf.cell(0, 10, f'DN трубы: {get_nominal_diameter(project_item)}')
+    pdf.cell(0, 10, "DN трубы:")
+    pdf.set_xy(x_start + 18, y_start + 5)
+    pdf.cell(0, 10, data_for_sketch["pipe"]["dn_text"])
 
     pdf.set_xy(x_start, y_start + 9)
-    pdf.cell(0, 10, f'Диам. трубы: {get_nominal_diameter_size(project_item)}')
+    pdf.cell(0, 10, "Диам. трубы:")
+    pdf.set_xy(x_start + 18, y_start + 9)
+    pdf.cell(0, 10, str(data_for_sketch["pipe"]["outer_diameter_mm"]))
     pdf.set_xy(x_start + 30, y_start + 9)
     pdf.cell(0, 10, 'mm')
 
     pdf.set_xy(x_start, y_start + 13)
-    pdf.cell(0, 10, f'Толщ. изол.: {get_insulation_thickness(project_item)}')
+    pdf.cell(0, 10, "Толщ. изол.:")
+    pdf.set_xy(x_start + 18, y_start + 13)
+    pdf.cell(0, 10, str(data_for_sketch["pipe"]["insulation_thickness_mm"]))
     pdf.set_xy(x_start + 30, y_start + 13)
     pdf.cell(0, 10, 'mm')
 
     pdf.set_xy(x_start, y_start + 17)
-    pdf.cell(0, 10, f'Темп.среды: {get_ambient_temperature(project_item)}')
+    pdf.cell(0, 10, "Темп.среды:")
+    pdf.set_xy(x_start + 18, y_start + 17)
+    pdf.cell(0, 10, str(data_for_sketch["pipe"]["medium_temperature_c_1"]))
     pdf.set_xy(x_start + 30, y_start + 17)
     pdf.cell(0, 10, '°C')
 
     pdf.set_xy(x_start, y_start + 21)
-    pdf.cell(0, 10, 'Угол наклона: 0')
+    pdf.cell(0, 10, "Угол наклона:")
+    pdf.set_xy(x_start + 18, y_start + 21)
+    pdf.cell(0, 10, str(data_for_sketch["pipe"]["slope_angle_deg"]))
     pdf.set_xy(x_start + 30, y_start + 21)
     pdf.cell(0, 10, '°')
 
@@ -350,17 +397,17 @@ def draw_attributes(pdf, project_item, created_by, created_date):
     pdf.cell(0, 10, 'Перемещение:')
 
     pdf.set_xy(x_start + 5, y_start + 30)
-    pdf.cell(0, 10, f'X: -{get_float(project_item, "move_minus_x", default="0")}/+{get_float(project_item, "move_plus_x", default="0")}')
+    pdf.cell(0, 10, f'X: -{data_for_sketch["movement_mm"]["x_minus"]}/+{data_for_sketch["movement_mm"]["x_plus"]}')
     pdf.set_xy(x_start + 30, y_start + 30)
     pdf.cell(0, 10, 'mm')
 
     pdf.set_xy(x_start + 5, y_start + 34)
-    pdf.cell(0, 10, f'Y: -{get_float(project_item, "move_minus_y", default="0")}/+{get_float(project_item,  "move_plus_y", default="0")}')
+    pdf.cell(0, 10, f'Y: -{data_for_sketch["movement_mm"]["y_minus"]}/+{data_for_sketch["movement_mm"]["y_plus"]}')
     pdf.set_xy(x_start + 30, y_start + 34)
     pdf.cell(0, 10, 'mm')
 
     pdf.set_xy(x_start + 5, y_start + 38)
-    pdf.cell(0, 10, f'Z: -{get_float(project_item, "move_minus_z", default="0")}/+{get_float(project_item, "move_plus_z", default="0")}')
+    pdf.cell(0, 10, f'Z: -{data_for_sketch["movement_mm"]["z_minus"]}/+{data_for_sketch["movement_mm"]["z_plus"]}')
     pdf.set_xy(x_start + 30, y_start + 38)
     pdf.cell(0, 10, 'mm')
 
@@ -368,17 +415,17 @@ def draw_attributes(pdf, project_item, created_by, created_date):
     pdf.cell(0, 10, 'Нагрузка:')
 
     pdf.set_xy(x_start + 5, y_start + 47)
-    pdf.cell(0, 10, f'X: -{get_float(project_item, "load_minus_x", default="0")}/+{get_float(project_item, "load_plus_x", default="0")}')
+    pdf.cell(0, 10, f'X: -{data_for_sketch["loads_kN"]["x_minus"]}/+{data_for_sketch["loads_kN"]["x_plus"]}')
     pdf.set_xy(x_start + 30, y_start + 47)
     pdf.cell(0, 10, 'kN')
 
     pdf.set_xy(x_start + 5, y_start + 51)
-    pdf.cell(0, 10, f'Y: -{get_float(project_item, "load_minus_y", default="0")}/+{get_float(project_item, "load_plus_y", default="0")}')
+    pdf.cell(0, 10, f'Y: -{data_for_sketch["loads_kN"]["y_minus"]}/+{data_for_sketch["loads_kN"]["y_plus"]}')
     pdf.set_xy(x_start + 30, y_start + 51)
     pdf.cell(0, 10, 'kN')
 
     pdf.set_xy(x_start + 5, y_start + 55)
-    pdf.cell(0, 10, f'Z: -{get_float(project_item, "load_minus_z", default="0")}/+{get_float(project_item, "load_plus_z", default="0")}')
+    pdf.cell(0, 10, f'Z: -{data_for_sketch["loads_kN"]["z_minus"]}/+{data_for_sketch["loads_kN"]["z_plus"]}')
     pdf.set_xy(x_start + 30, y_start + 55)
     pdf.cell(0, 10, 'kN')
 
@@ -386,17 +433,17 @@ def draw_attributes(pdf, project_item, created_by, created_date):
     pdf.cell(0, 10, 'Испытательная нагрузка:')
 
     pdf.set_xy(x_start + 5, y_start + 64)
-    pdf.cell(0, 10, f'X: {get_float(project_item, "test_load_x", default="0")}')
+    pdf.cell(0, 10, f'X: {data_for_sketch["test_loads_kN"]["x"]}')
     pdf.set_xy(x_start + 30, y_start + 64)
     pdf.cell(0, 10, 'kN')
 
     pdf.set_xy(x_start + 5, y_start + 68)
-    pdf.cell(0, 10, f'Y: {get_float(project_item, "test_load_y", default="0")}')
+    pdf.cell(0, 10, f'Y: {data_for_sketch["test_loads_kN"]["y"]}')
     pdf.set_xy(x_start + 30, y_start + 68)
     pdf.cell(0, 10, 'kN')
 
     pdf.set_xy(x_start + 5, y_start + 72)
-    pdf.cell(0, 10, f'Z: {get_float(project_item, "test_load_z", default="0")}')
+    pdf.cell(0, 10, f'Z: {data_for_sketch["test_loads_kN"]["z"]}')
     pdf.set_xy(x_start + 30, y_start + 72)
     pdf.cell(0, 10, 'kN')
 
@@ -404,17 +451,17 @@ def draw_attributes(pdf, project_item, created_by, created_date):
     pdf.cell(0, 10, 'Нагрузка на сторону')
 
     pdf.set_xy(x_start + 37, y_start + 8)
-    pdf.cell(0, 10, f'Горяч. нагр.: {get_float(project_item, "hot_load", default="0")}')
+    pdf.cell(0, 10, f'Горяч. нагр.: {data_for_sketch["spring_block"]["hot_load_kN"]}')
     pdf.set_xy(x_start + 68, y_start + 8)
     pdf.cell(0, 10, 'kN')
 
     pdf.set_xy(x_start + 37, y_start + 12)
-    pdf.cell(0, 10, f'Холод. нагр.: {get_float(project_item, "cold_load", default="0")}')
+    pdf.cell(0, 10, f'Холод. нагр.: {data_for_sketch["spring_block"]["cold_load_kN"]}')
     pdf.set_xy(x_start + 68, y_start + 12)
     pdf.cell(0, 10, 'kN')
 
     pdf.set_xy(x_start + 37, y_start + 16)
-    pdf.cell(0, 10, f'Жестк. пруж.: {get_int(project_item, "spring_stiffness", default="0")}')
+    pdf.cell(0, 10, f'Жестк. пруж.: {data_for_sketch["spring_block"]["stiffness_N_per_mm"]}')
     pdf.set_xy(x_start + 64, y_start + 16)
     pdf.cell(0, 10, 'N/mm')
 
@@ -434,25 +481,25 @@ def draw_attributes(pdf, project_item, created_by, created_date):
     pdf.cell(0, 10, 'Запас хода пружины')
 
     pdf.set_xy(x_start + 37, y_start + 36)
-    pdf.cell(0, 10, f'вверх: {get_int(project_item, "spring_travel_up", default="-")}')
-    pdf.set_xy(x_start + 68, y_start + 36)
+    pdf.cell(0, 10, f'вверх: {data_for_sketch["spring_travel_reserve_mm"]["up"]}')
+    pdf.set_xy(x_start + 66, y_start + 36)
     pdf.cell(0, 10, 'mm')
 
     pdf.set_xy(x_start + 37, y_start + 42)
-    pdf.cell(0, 10, f'вниз: {get_int(project_item, "spring_travel_down", default="-")}')
-    pdf.set_xy(x_start + 68, y_start + 42)
+    pdf.cell(0, 10, f'вниз: {data_for_sketch["spring_travel_reserve_mm"]["down"]}')
+    pdf.set_xy(x_start + 66, y_start + 42)
     pdf.cell(0, 10, 'mm')
 
     pdf.set_xy(x_start + 37, y_start + 49)
     pdf.cell(0, 10, f'Диапаз.рег-ки: {get_int(project_item, "regulation_range_plus", default="-")}')
-    pdf.set_xy(x_start + 68, y_start + 49)
+    pdf.set_xy(x_start + 66, y_start + 49)
     pdf.cell(0, 10, 'mm')
 
     pdf.line(x_start + 37, y_start + 63, x_start + 73, y_start + 63)
 
     pdf.set_xy(x_start + 56, y_start + 52)
     pdf.cell(0, 10, get_int(project_item, "regulation_range_minus", default="-"))
-    pdf.set_xy(x_start + 68, y_start + 52)
+    pdf.set_xy(x_start + 66, y_start + 52)
     pdf.cell(0, 10, 'mm')
 
     pdf.set_xy(x_start + 37, y_start + 60)
@@ -511,7 +558,9 @@ def draw_attributes(pdf, project_item, created_by, created_date):
     pdf.cell(0, 10, 'Кол-во штук:')
 
     pdf.set_xy(x_start + 175, y_start + 27.5)
-    pdf.cell(0, 10, f'{project_item.count}')
+
+    original_item = project_item.original_item
+    pdf.cell(0, 10, f'{original_item.children.count()}')
 
     pdf.set_xy(x_start + 130, y_start + 54.5)
     pdf.cell(0, 10, 'Подготовил:')
@@ -560,7 +609,7 @@ def render_sketch_pdf(
     draw_main(pdf, project_item, double, field_name, coords_field_name)
     draw_metadata(pdf, project_item)
     draw_attributes(pdf, project_item, created_by, today)
-    draw_specifications(pdf, project_item)
+    draw_specifications(pdf, project_item, composition_type)
 
     # Сохранение PDF
     tz = pytz.timezone('Europe/Moscow')

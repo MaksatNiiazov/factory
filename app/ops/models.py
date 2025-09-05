@@ -36,7 +36,8 @@ from ops.cache import get_cached_attributes, get_cached_attributes_with_topologi
 from ops.exceptions import TopologicalSortException
 
 from catalog.choices import Standard, SeriesNameChoices, ComponentGroupType
-from catalog.models import PipeDiameter, Material, Directory, DirectoryEntry, ProductFamily, ComponentGroup
+from catalog.models import PipeDiameter, Material, Directory, DirectoryEntry, ProductFamily, ComponentGroup, \
+    ProductClass
 
 from kernel.fields import AttributeChoiceField
 from kernel.mixins import SoftDeleteModelMixin
@@ -202,10 +203,12 @@ class ProjectItem(SoftDeleteModelMixin, models.Model):
     move_plus_x = models.FloatField(verbose_name=_('Перемещение +X'), null=True, blank=True)
     move_plus_y = models.FloatField(verbose_name=_('Перемещение +Y'), null=True, blank=True)
     move_plus_z = models.FloatField(verbose_name=_('Перемещение +Z'), null=True, blank=True)
+    move_plus_d = models.FloatField(verbose_name=_("Перемещение +угловое (градусы)"), null=True, blank=True)
 
     move_minus_x = models.FloatField(verbose_name=_('Перемещение -X'), null=True, blank=True)
     move_minus_y = models.FloatField(verbose_name=_('Перемещение -Y'), null=True, blank=True)
     move_minus_z = models.FloatField(verbose_name=_('Перемещение -Z'), null=True, blank=True)
+    move_minus_d = models.FloatField(verbose_name=_("Перемещение -угловое (градусы)"), null=True, blank=True)
 
     estimated_state = models.CharField(
         max_length=EstimatedState.get_max_length(), choices=EstimatedState.choices, default=EstimatedState.COLD_LOAD,
@@ -323,6 +326,29 @@ class ProjectItem(SoftDeleteModelMixin, models.Model):
             counter += 1
 
         return "\n".join(numbered_lines)
+
+    def get_available_selection(self):
+        # TODO: Временные способ, поменять
+        from ops.services.product_selection import ProductSelectionAvailableOptions
+        from ops.services.shock_selection import ShockSelectionAvailableOptions
+        from ops.services.spacer_selection import SpacerSelectionAvailableOptions
+
+        selection_params = self.selection_params
+
+        if not selection_params:
+            return None
+
+        product_class_id = selection_params["product_class"]
+        product_class = ProductClass.objects.get(id=product_class_id)
+
+        if product_class.name in ["Подвес переменного усилия", "Опора переменного усилия"]:
+            return ProductSelectionAvailableOptions(self)
+        if product_class.name == "Гидроамортизаторы":
+            return ShockSelectionAvailableOptions(self)
+        if product_class.name == "Распорки":
+            return SpacerSelectionAvailableOptions(self)
+
+        return None
 
     def save(self, *args, **kwargs):
         """
@@ -649,6 +675,7 @@ class Variant(SoftDeleteModelMixin, models.Model):
     detail_type = models.ForeignKey(
         DetailType, on_delete=models.CASCADE, related_name='variants', verbose_name=_('Тип детали/изделий')
     )
+    icon = models.ImageField(upload_to="variants/", null=True, blank=True, verbose_name=_("Иконка"))
     name = models.CharField(max_length=255, verbose_name=_('Наименование'))
 
     marking_template = models.CharField(max_length=255, null=True, blank=True, verbose_name=_('Шаблон маркировки'))
@@ -796,9 +823,9 @@ class Variant(SoftDeleteModelMixin, models.Model):
 
                 if base_composition.base_child_variant:
                     child_item = Item.objects.filter(
-                        parents__item=item,
+                        parents__parent=item,
+                        parents__position=base_composition.position,
                         variant=base_composition.base_child_variant,
-                        position=base_composition.position,
                     ).first()
 
                     if not child_item:
@@ -807,9 +834,9 @@ class Variant(SoftDeleteModelMixin, models.Model):
                     item_for_search = child_item
                 else:
                     child_item = Item.objects.filter(
-                        parents__item=item,
+                        parents__parent=item,
+                        parents__position=base_composition.position,
                         type=base_composition.base_child,
-                        position=base_composition.position,
                     ).first()
 
                     if not child_item:
