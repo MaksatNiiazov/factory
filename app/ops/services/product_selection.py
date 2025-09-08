@@ -172,6 +172,33 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
         temp2 = self.params['pipe_params']['temp2']
         return temp1, temp2
 
+    def get_selected_clamp_load(self) -> Optional[float]:
+        """Возвращает нагрузку выбранного амортизатора/распорки."""
+        selected_spring = self.get_selected_spring_block()
+        if not selected_spring:
+            return None
+
+        variant = selected_spring.get('variant')
+        parameters = selected_spring.get('parameters') or {}
+
+        item = selected_spring.get('item')
+        if isinstance(item, Item):
+            variant = item.variant
+            parameters = item.parameters or {}
+
+        if isinstance(variant, Variant):
+            attributes = variant.get_attributes()
+            load_attr = self.get_attribute_by_usage(attributes, AttributeUsageChoices.LOAD)
+            if load_attr:
+                value = parameters.get(load_attr.name)
+                if value is not None:
+                    try:
+                        return float(value)
+                    except (TypeError, ValueError):
+                        return None
+
+        return None
+
     def calculate_load(self) -> Dict[str, Any]:
         """
         Выполняет расчёт подходящих пружинных болков по введённой нагрузке и перемещениям.
@@ -545,6 +572,20 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
                 '#Выбор крепления к трубе: Не найден атрибут CoveringType. Не могу найти подходящие хомуты.'
             )
             return []
+
+        clamp_load_attribute = self.get_attribute_by_usage(attributes, AttributeUsageChoices.CLAMP_LOAD)
+        if not clamp_load_attribute:
+            self.debug.append(
+                '#Выбор крепления к трубе: Не найден атрибут ClampLoad. Не могу найти подходящие хомуты.'
+            )
+            return []
+
+        selected_clamp_load = self.get_selected_clamp_load()
+        if selected_clamp_load is None:
+            self.debug.append(
+                '#Выбор крепления к трубе: Не найдена нагрузка выбранного амортизатора/распорки. Не могу найти подходящие хомуты.'
+            )
+            return []
         
         # Инициализация нужных данных
         load_group_ids = self.get_load_group_ids_by_lgv()
@@ -596,7 +637,7 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
         self.debug.append(f'#Выбор крепления к трубе: Температура 1: {temp1}, Температура 2: {temp2}')
 
         # Введенная нагрузка
-        load = self.get_load_minus_z() / self.get_selected_branch_counts()
+        load = self.get_load_minus_z()
         self.debug.append(f'#Выбор крепления к трубе: Введенная нагрузка: {load}')
 
         # Группа материалов
@@ -673,6 +714,7 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
             'variant': variant,
             f'parameters__{material_attribute.name}': clamp_material.id,
             f'parameters__{pipe_diameter_attribute.name}': pipe_diameter.id,
+            f'parameters__{clamp_load_attribute.name}__gte': selected_clamp_load,
             f'parameters__{load_attribute.name}__gte': load_with_temp1_coefficient,
             f'parameters__{covering_type_attribute.name}__in': covering_type_ids,
         }

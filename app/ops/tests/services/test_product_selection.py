@@ -30,6 +30,25 @@ class ProductSelectionAvailableOptionsTestCase(TestCase):
             name='Без покрытия',
         )
 
+        self.spring_detail_type = DetailType.objects.create(
+            name='Пружинный блок',
+            designation='SPR',
+            category=DetailType.DETAIL,
+        )
+        self.spring_variant = Variant.objects.create(
+            detail_type=self.spring_detail_type,
+            name='SpringVariant',
+        )
+        self.spring_load_attribute = Attribute.objects.create(
+            variant=self.spring_variant,
+            type=AttributeType.NUMBER,
+            usage=AttributeUsageChoices.LOAD,
+            name='Fn',
+            label_ru='Номинальная нагрузка',
+            fieldset=self.fieldset,
+            position=1,
+        )
+
     def test_12x12(self):
         load_group, _ = LoadGroup.objects.get_or_create(
             lgv=12,
@@ -127,6 +146,16 @@ class ProductSelectionAvailableOptionsTestCase(TestCase):
             position=4,
         )
 
+        hzn_clamp_load_attribute = Attribute.objects.create(
+            detail_type=hzn_detail_type,
+            type=AttributeType.NUMBER,
+            usage=AttributeUsageChoices.CLAMP_LOAD,
+            name='Fn1',
+            label_ru='Нагрузка для хомутов',
+            fieldset=self.fieldset,
+            position=5,
+        )
+
         hzn_covering_type = Attribute.objects.create(
             detail_type=hzn_detail_type,
             type=AttributeType.CATALOG,
@@ -134,7 +163,7 @@ class ProductSelectionAvailableOptionsTestCase(TestCase):
             name='coating',
             label_ru='Покрытие',
             fieldset=self.fieldset,
-            position=5,
+            position=6,
         )
 
         hzn_variant = Variant.objects.create(
@@ -156,6 +185,7 @@ class ProductSelectionAvailableOptionsTestCase(TestCase):
                 'material': self.material.id,
                 'OD': self.pipe_diameter.id,
                 'Fn': 1000,
+                'Fn1': 1000,
                 'coating': self.covering_type.id,
             },
             author=self.user,
@@ -193,6 +223,8 @@ class ProductSelectionAvailableOptionsTestCase(TestCase):
         product_selection.params['pipe_params']['temp1'] = 130
         product_selection.params['spring_choice']['selected_spring'] = {
             'load_group_lgv': load_group.lgv,
+            'variant': self.spring_variant,
+            'parameters': {self.spring_load_attribute.name: 1000},
         }
 
         items = product_selection.get_available_pipe_clamps()
@@ -321,6 +353,16 @@ class ProductSelectionAvailableOptionsTestCase(TestCase):
             position=4,
         )
 
+        hzn_clamp_load_attribute = Attribute.objects.create(
+            detail_type=hzn_detail_type,
+            type=AttributeType.NUMBER,
+            usage=AttributeUsageChoices.CLAMP_LOAD,
+            name='Fn1',
+            label_ru='Нагрузка для хомутов',
+            fieldset=self.fieldset,
+            position=5,
+        )
+
         hzn_covering_type = Attribute.objects.create(
             detail_type=hzn_detail_type,
             type=AttributeType.CATALOG,
@@ -328,7 +370,7 @@ class ProductSelectionAvailableOptionsTestCase(TestCase):
             name='coating',
             label_ru='Покрытие',
             fieldset=self.fieldset,
-            position=5,
+            position=6,
         )
 
         hzn_variant = Variant.objects.create(
@@ -350,6 +392,7 @@ class ProductSelectionAvailableOptionsTestCase(TestCase):
                 'material': self.material.id,
                 'OD': self.pipe_diameter.id,
                 'Fn': 1000,
+                'Fn1': 1000,
                 'coating': self.covering_type.id,
             },
             author=self.user,
@@ -387,6 +430,8 @@ class ProductSelectionAvailableOptionsTestCase(TestCase):
         product_selection.params['pipe_params']['temp1'] = 130
         product_selection.params['spring_choice']['selected_spring'] = {
             'load_group_lgv': load_group.lgv,
+            'variant': self.spring_variant,
+            'parameters': {self.spring_load_attribute.name: 1000},
         }
 
         items = product_selection.get_available_pipe_clamps()
@@ -398,3 +443,165 @@ class ProductSelectionAvailableOptionsTestCase(TestCase):
         self.assertIsNotNone(found_zom_item)
         self.assertEqual(found_hzn_item.id, hzn_item.id)
         self.assertEqual(found_zom_item.id, zom_item.id)
+
+    def test_double_clamp_load_filtering(self):
+        load_group, _ = LoadGroup.objects.get_or_create(
+            lgv=12,
+            defaults={'kn': 1},
+        )
+
+        product_class = ProductClass.objects.create(name='ProductClass')
+        product_family = ProductFamily.objects.create(
+            product_class=product_class,
+            name='ProductFamily',
+            is_upper_mount_selectable=True,
+        )
+
+        hzn_detail_type = DetailType.objects.create(
+            name='Хомут двухболтовый',
+            designation='HZN',
+            category=DetailType.ASSEMBLY_UNIT,
+        )
+
+        hzn_lgv_attribute = Attribute.objects.create(
+            detail_type=hzn_detail_type,
+            type=AttributeType.CATALOG,
+            usage=AttributeUsageChoices.LOAD_GROUP,
+            catalog=AttributeCatalog.LOAD_GROUP,
+            name='LGV',
+            label_ru='Нагрузочная группа',
+            fieldset=self.fieldset,
+            position=1,
+        )
+
+        hzn_pipe_diameter = Attribute.objects.create(
+            detail_type=hzn_detail_type,
+            type=AttributeType.CATALOG,
+            catalog=AttributeCatalog.PIPE_DIAMETER,
+            name='OD',
+            label_ru='Диаметр трубопровода',
+            fieldset=self.fieldset,
+            position=2,
+        )
+
+        hzn_material = Attribute.objects.create(
+            detail_type=hzn_detail_type,
+            type=AttributeType.CATALOG,
+            catalog=AttributeCatalog.MATERIAL,
+            name='material',
+            label_ru='Материал',
+            fieldset=self.fieldset,
+            position=3,
+        )
+
+        hzn_load_attribute = Attribute.objects.create(
+            detail_type=hzn_detail_type,
+            type=AttributeType.NUMBER,
+            usage=AttributeUsageChoices.LOAD,
+            name='Fn',
+            label_ru='Номинальная нагрузка',
+            fieldset=self.fieldset,
+            position=4,
+        )
+
+        hzn_clamp_load_attribute = Attribute.objects.create(
+            detail_type=hzn_detail_type,
+            type=AttributeType.NUMBER,
+            usage=AttributeUsageChoices.CLAMP_LOAD,
+            name='Fn1',
+            label_ru='Нагрузка для хомутов',
+            fieldset=self.fieldset,
+            position=5,
+        )
+
+        hzn_covering_type = Attribute.objects.create(
+            detail_type=hzn_detail_type,
+            type=AttributeType.CATALOG,
+            catalog=AttributeCatalog.COVERING_TYPE,
+            name='coating',
+            label_ru='Покрытие',
+            fieldset=self.fieldset,
+            position=6,
+        )
+
+        hzn_variant = Variant.objects.create(
+            detail_type=hzn_detail_type,
+            name='1',
+            marking_template='HZN {{ LGV.lgv }} ({{ inner_id }})',
+        )
+
+        pipe_mounting_group = PipeMountingGroup.objects.create(name='Хомуты двухболтовые')
+        pipe_mounting_group.variants.add(hzn_variant)
+
+        hzn_item_ok = Item.objects.create(
+            type=hzn_detail_type,
+            variant=hzn_variant,
+            parameters={
+                'LGV': load_group.id,
+                'material': self.material.id,
+                'OD': self.pipe_diameter.id,
+                'Fn': 200,
+                'Fn1': 200,
+                'coating': self.covering_type.id,
+            },
+            author=self.user,
+        )
+
+        hzn_item_low_fn1 = Item.objects.create(
+            type=hzn_detail_type,
+            variant=hzn_variant,
+            parameters={
+                'LGV': load_group.id,
+                'material': self.material.id,
+                'OD': self.pipe_diameter.id,
+                'Fn': 200,
+                'Fn1': 190,
+                'coating': self.covering_type.id,
+            },
+            author=self.user,
+        )
+
+        hzn_item_low_fn = Item.objects.create(
+            type=hzn_detail_type,
+            variant=hzn_variant,
+            parameters={
+                'LGV': load_group.id,
+                'material': self.material.id,
+                'OD': self.pipe_diameter.id,
+                'Fn': 140,
+                'Fn1': 250,
+                'coating': self.covering_type.id,
+            },
+            author=self.user,
+        )
+
+        project = Project.objects.create(
+            number='12345',
+            owner=self.user,
+            status=ProjectStatus.DRAFT,
+            load_unit=LoadUnit.KN,
+            move_unit=MoveUnit.MM,
+            temperature_unit=TemperatureUnit.CELSIUS,
+        )
+
+        project_item = ProjectItem.objects.create(project=project, position_number=1)
+
+        product_selection = ProductSelectionAvailableOptions(project_item)
+        product_selection.params['product_family'] = product_family.id
+        product_selection.params['load_and_move']['load_minus_z'] = 150
+        product_selection.params['pipe_options']['branch_qty'] = 2
+        product_selection.params['pipe_params']['pipe_mounting_group'] = pipe_mounting_group.id
+        product_selection.params['pipe_params']['clamp_material'] = self.material.id
+        product_selection.params['pipe_params']['nominal_diameter'] = self.pipe_diameter.id
+        product_selection.params['pipe_params']['temp1'] = 200
+        product_selection.params['spring_choice']['selected_spring'] = {
+            'load_group_lgv': load_group.lgv,
+            'variant': self.spring_variant,
+            'parameters': {self.spring_load_attribute.name: 200},
+        }
+
+        items = product_selection.get_available_pipe_clamps()
+
+        self.assertIn(hzn_item_ok.id, items)
+        self.assertNotIn(hzn_item_low_fn1.id, items)
+        self.assertNotIn(hzn_item_low_fn.id, items)
