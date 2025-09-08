@@ -2,10 +2,18 @@ from collections import defaultdict, Counter
 from copy import copy
 from typing import Optional, Dict, Any, List, Tuple
 
-from catalog.models import SSGCatalog, PipeDiameter, SupportDistance, PipeMountingGroup, PipeMountingRule, Material
+from catalog.models import (
+    SSGCatalog,
+    PipeDiameter,
+    SupportDistance,
+    PipeMountingGroup,
+    PipeMountingRule,
+    Material,
+    ClampMaterialCoefficient,
+)
 from ops.api.serializers import VariantSerializer
 from ops.models import Item, Variant, BaseComposition
-from ops.choices import AttributeUsageChoices
+from ops.choices import AttributeUsageChoices, AttributeCatalog
 from ops.services.base_selection import BaseSelectionAvailableOptions
 
 
@@ -182,6 +190,13 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
             load /= count
         return load
 
+    def get_selected_clamp_load(self) -> Optional[float]:
+        """Возвращает нагрузку выбранной распорки."""
+        block = self.get_catalog_block()
+        if not block:
+            return None
+        return block.fn
+
     def get_mounting_group_a(self) -> Optional[PipeMountingGroup]:
         group_id = self.params.get("pipe_params", {}).get("mounting_group_a")
         if group_id:
@@ -212,19 +227,47 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
             return result
 
         load = self.get_load()
+        temperature = self.params.get("pipe_params", {}).get("temperature")
+        material_id = self.params.get("pipe_params", {}).get("material")
+        clamp_material = Material.objects.filter(id=material_id).first() if material_id else None
+        selected_clamp_load = self.get_selected_clamp_load()
+
+        if (
+            load is None
+            or temperature is None
+            or not clamp_material
+            or selected_clamp_load is None
+        ):
+            self.debug.append("Недостаточно данных для фильтрации креплений A")
+            return result
+
+        coefficient = (
+            ClampMaterialCoefficient.objects.filter(material_group=clamp_material.group)
+            .for_temperature(temperature)
+            .first()
+        )
+        if not coefficient:
+            self.debug.append("Не найден коэффициент материала для креплений A")
+            return result
+
+        load_with_temp = load / coefficient.coefficient
+
         for variant in group.variants.all():
             attributes = variant.detail_type.get_attributes()
             load_attr = self.get_attribute_by_usage(attributes, AttributeUsageChoices.LOAD)
             diam_attr = self.get_pipe_diameter_attribute(attributes)
-            if not (load_attr and diam_attr):
+            clamp_load_attr = self.get_attribute_by_usage(attributes, AttributeUsageChoices.CLAMP_LOAD)
+            material_attr = attributes.filter(catalog=AttributeCatalog.MATERIAL).first()
+            if not (load_attr and diam_attr and clamp_load_attr):
                 continue
-            items = Item.objects.filter(
-                variant=variant,
-                **{
-                    f"parameters__{load_attr.name}__gte": load,
-                    f"parameters__{diam_attr.name}": pipe_diameter.id
-                }
-            ).values_list("id", flat=True)
+            params = {
+                f"parameters__{load_attr.name}__gte": load_with_temp,
+                f"parameters__{diam_attr.name}": pipe_diameter.id,
+                f"parameters__{clamp_load_attr.name}__gte": selected_clamp_load,
+            }
+            if material_attr and material_id:
+                params[f"parameters__{material_attr.name}"] = material_id
+            items = Item.objects.filter(variant=variant, **params).values_list("id", flat=True)
             result.extend(items)
         return list(result)
 
@@ -236,15 +279,45 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
             return result
 
         load = self.get_load()
+        temperature = self.params.get("pipe_params", {}).get("temperature")
+        material_id = self.params.get("pipe_params", {}).get("material")
+        clamp_material = Material.objects.filter(id=material_id).first() if material_id else None
+        selected_clamp_load = self.get_selected_clamp_load()
+
+        if (
+            load is None
+            or temperature is None
+            or not clamp_material
+            or selected_clamp_load is None
+        ):
+            self.debug.append("Недостаточно данных для фильтрации креплений B")
+            return result
+
+        coefficient = (
+            ClampMaterialCoefficient.objects.filter(material_group=clamp_material.group)
+            .for_temperature(temperature)
+            .first()
+        )
+        if not coefficient:
+            self.debug.append("Не найден коэффициент материала для креплений B")
+            return result
+
+        load_with_temp = load / coefficient.coefficient
+
         for variant in group.variants.all():
             attributes = variant.detail_type.get_attributes()
             load_attr = self.get_attribute_by_usage(attributes, AttributeUsageChoices.LOAD)
-            if not load_attr:
+            clamp_load_attr = self.get_attribute_by_usage(attributes, AttributeUsageChoices.CLAMP_LOAD)
+            material_attr = attributes.filter(catalog=AttributeCatalog.MATERIAL).first()
+            if not (load_attr and clamp_load_attr):
                 continue
-            items = Item.objects.filter(
-                variant=variant,
-                **{f"parameters__{load_attr.name}__gte": load}
-            ).values_list("id", flat=True)
+            params = {
+                f"parameters__{load_attr.name}__gte": load_with_temp,
+                f"parameters__{clamp_load_attr.name}__gte": selected_clamp_load,
+            }
+            if material_attr and material_id:
+                params[f"parameters__{material_attr.name}"] = material_id
+            items = Item.objects.filter(variant=variant, **params).values_list("id", flat=True)
             result.extend(items)
         return list(result)
 

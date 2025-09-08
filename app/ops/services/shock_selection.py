@@ -7,7 +7,13 @@ from django.db.models import Q, OuterRef, Exists, Count, Sum
 from constance import config
 
 from catalog.models import (
-    PipeDiameter, SupportDistance, PipeMountingGroup, PipeMountingRule, Material, SSBCatalog,
+    PipeDiameter,
+    SupportDistance,
+    PipeMountingGroup,
+    PipeMountingRule,
+    Material,
+    SSBCatalog,
+    ClampMaterialCoefficient,
 )
 
 from ops.api.constants import FN_ON_REQUEST
@@ -239,6 +245,13 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
     def get_temperature(self):
         return self.params['pipe_params']['temperature']
 
+    def get_selected_clamp_load(self) -> Optional[float]:
+        """Возвращает нагрузку выбранного амортизатора."""
+        catalog_block = self.get_catalog_block()
+        if not catalog_block:
+            return None
+        return catalog_block.fn
+
     def get_pipe_diameter_size(self) -> Optional[float]:
         """
         Возвращает диаметр трубы в миллиметрах.
@@ -466,6 +479,35 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
             else:
                 self.debug.append("#Список креплений A: Подходящих материалов не найдено")
 
+        selected_clamp_load = self.get_selected_clamp_load()
+        if selected_clamp_load is None:
+            self.debug.append(
+                "#Список креплений A: Не найдена нагрузка выбранного амортизатора. Поиск невозможен."
+            )
+            return []
+
+        load_value = self.get_load()
+
+        clamp_material = Material.objects.filter(id=chosen_material_id).first() if chosen_material_id else None
+        if not clamp_material or temperature is None:
+            self.debug.append(
+                "#Список креплений A: Не удалось определить материал или температуру для расчёта коэффициента."
+            )
+            return []
+
+        coefficient = (
+            ClampMaterialCoefficient.objects.filter(material_group=clamp_material.group)
+            .for_temperature(temperature)
+            .first()
+        )
+        if not coefficient:
+            self.debug.append(
+                f"#Список креплений A: Не найден коэффициент для материала {clamp_material} и температуры {temperature}."
+            )
+            return []
+
+        load_with_temp = load_value / coefficient.coefficient
+
         # Группа креплений A
         mounting_group_a = self.get_mounting_group_a()
         if not mounting_group_a:
@@ -486,19 +528,21 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
                 continue
 
             load_attribute = self.get_attribute_by_usage(attributes, AttributeUsageChoices.LOAD)
+            clamp_load_attribute = self.get_attribute_by_usage(attributes, AttributeUsageChoices.CLAMP_LOAD)
             pipe_diameter_attribute = self.get_pipe_diameter_attribute(attributes)
             material_attr = attributes.filter(catalog=AttributeCatalog.MATERIAL).first()
 
-            if not load_attribute:
-                self.debug.append(f"#Список креплений A: У варианта {variant.id} отсутствует атрибут нагрузки.")
+            if not (load_attribute and clamp_load_attribute):
+                self.debug.append(
+                    f"#Список креплений A: У варианта {variant.id} отсутствуют необходимые атрибуты нагрузки."
+                )
                 continue
-
-            load_value = self.get_load()
 
             # Базовый фильтр
             filter_params = {
                 'variant': variant,
-                f'parameters__{load_attribute.name}__gte': load_value,
+                f'parameters__{load_attribute.name}__gte': load_with_temp,
+                f'parameters__{clamp_load_attribute.name}__gte': selected_clamp_load,
             }
 
             # Фильтр по диаметру, если атрибут есть
@@ -539,8 +583,37 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
             self.debug.append("#Список креплений B: Не выбрана группа креплений B. Поиск невозможен.")
             return []
 
-        variants = mounting_group_b.variants.all()
+        selected_clamp_load = self.get_selected_clamp_load()
+        load_value = self.get_load()
+        temperature = self.params['pipe_params']['temperature']
+        chosen_material_id = self.params['pipe_params'].get('material')
+        clamp_material = Material.objects.filter(id=chosen_material_id).first() if chosen_material_id else None
 
+        if (
+            selected_clamp_load is None
+            or load_value is None
+            or not clamp_material
+            or temperature is None
+        ):
+            self.debug.append(
+                "#Список креплений B: Недостаточно данных для расчёта коэффициента или нагрузки."
+            )
+            return []
+
+        coefficient = (
+            ClampMaterialCoefficient.objects.filter(material_group=clamp_material.group)
+            .for_temperature(temperature)
+            .first()
+        )
+        if not coefficient:
+            self.debug.append(
+                f"#Список креплений B: Не найден коэффициент для материала {clamp_material} и температуры {temperature}."
+            )
+            return []
+
+        load_with_temp = load_value / coefficient.coefficient
+
+        variants = mounting_group_b.variants.all()
         items = Item.objects.filter(variant__in=variants)
 
         found_items = []
@@ -549,15 +622,18 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
             self.debug.append(f"#Список креплений B: Проверяю исполнение {variant} (id={variant.id})")
             attributes = variant.get_attributes()
 
-            # Найти скобы по нагрузке
             if self.is_bracket(attributes):
-                # Это скоба
                 self.debug.append(f"#Список креплений B: Исполнение {variant} является скобой")
                 load_attribute = self.get_attribute_by_usage(attributes, AttributeUsageChoices.LOAD)
+                clamp_load_attribute = self.get_attribute_by_usage(attributes, AttributeUsageChoices.CLAMP_LOAD)
+
+                if not (load_attribute and clamp_load_attribute):
+                    continue
 
                 filter_params = {
                     'variant': variant,
-                    f'parameters__{load_attribute.name}__gte': self.get_load(),
+                    f'parameters__{load_attribute.name}__gte': load_with_temp,
+                    f'parameters__{clamp_load_attribute.name}__gte': selected_clamp_load,
                 }
                 bracket_items = list(items.filter(**filter_params).values_list('id', flat=True))
                 self.debug.append(f"#Список креплений B: Найдено {len(bracket_items)} скоб для исполнения {variant}")
