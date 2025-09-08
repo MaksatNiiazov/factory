@@ -96,6 +96,7 @@ class ProjectItemPermission(ActionPermission):
     perms_map = dict(
         ActionPermission.perms_map,
         save_as=['%(app_label)s.change_%(model_name)s'],
+        set_product_family=['%(app_label)s.change_%(model_name)s'],
         set_selection=['%(app_label)s.change_%(model_name)s'],
         update_item=['%(app_label)s.change_%(model_name)s'],
         calculate=['%(app_label)s.change_%(model_name)s'],

@@ -153,14 +153,15 @@ class ProductClassSerializer(CatalogueBaseSerializer):
 class ProductFamilySerializer(CatalogueBaseSerializer):
     class Meta:
         model = ProductFamily
-        fields = (
+        fields = [
             "id",
             "product_class",
             "name",
             "icon",
             "is_upper_mount_selectable",
             "has_rod",
-        )
+            "selection_type",
+        ]
 
 
 class LoadSerializer(CatalogueBaseSerializer):
@@ -187,7 +188,7 @@ class SpringStiffnessSerializer(CatalogueBaseSerializer):
 class PipeMountingGroupSerializer(CatalogueBaseSerializer):
     class Meta:
         model = PipeMountingGroup
-        fields = ("id", "name", "variants")
+        fields = ("id", "name", "show_variants", "variants")
         expandable_fields = {
             "variants": ("ops.api.serializers.VariantSerializer", {"many": True}),
         }

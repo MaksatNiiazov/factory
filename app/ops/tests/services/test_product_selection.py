@@ -183,9 +183,9 @@ class ProductSelectionAvailableOptionsTestCase(TestCase):
         project_item = ProjectItem.objects.create(
             project=project,
             position_number=1,
+            product_family=product_family,
         )
         product_selection = ProductSelectionAvailableOptions(project_item)
-        product_selection.params['product_family'] = product_family.id
         product_selection.params['load_and_move']['load_minus_z'] = 500
         product_selection.params['pipe_params']['pipe_mounting_group'] = pipe_mounting_group.id
         product_selection.params['pipe_params']['clamp_material'] = self.material.id
@@ -377,9 +377,9 @@ class ProductSelectionAvailableOptionsTestCase(TestCase):
         project_item = ProjectItem.objects.create(
             project=project,
             position_number=1,
+            product_family=product_family,
         )
         product_selection = ProductSelectionAvailableOptions(project_item)
-        product_selection.params['product_family'] = product_family.id
         product_selection.params['load_and_move']['load_minus_z'] = 500
         product_selection.params['pipe_params']['pipe_mounting_group'] = pipe_mounting_group.id
         product_selection.params['pipe_params']['clamp_material'] = self.material.id

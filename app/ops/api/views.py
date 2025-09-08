@@ -33,7 +33,8 @@ from kernel.api.permissions import ActionPermission, AnyOneCanViewChoicesPermiss
 from kernel.api.views import CustomModelViewSet
 from kernel.consumers import send_event_to_all
 from kernel.models import Organization
-from ops.api.exceptions import ItemNotFound, ResourceNotFound, FormatNotSupported, ProjectNotFound
+from ops.api.exceptions import ItemNotFound, ResourceNotFound, FormatNotSupported, ProjectNotFound, \
+    ProjectItemProductFamilyNotSet, ProjectItemSelectionTypeNotSet
 from ops.api.filters import ProjectFilter, DetailTypeFilter, ItemFilter, VariantFilter, BaseCompositionFilter, \
     AttributeFilter
 from ops.api.permissions import (
@@ -47,9 +48,11 @@ from ops.api.serializers import (
     BaseCompositionSerializer, SelectionParamsSerializer, VariantWithDetailTypeSerializer, ShockCalcSerializer,
     ShockCalcResultSerializer, AvailableTopMountsRequestSerializer, TopMountVariantSerializer, AssemblyLengthSerializer,
     AvailableMountsRequestSerializer, MountingVariantSerializer, ShockSelectionParamsSerializer,
-    SpacerSelectionParamsSerializer, GetSketchSerializer, WVDSelectionParamsSerializer
+    SpacerSelectionParamsSerializer, GetSketchSerializer, WVDSelectionParamsSerializer,
+    ProjectItemSetProductFamilySerializer,
+
 )
-from ops.api.utils import get_extended_range, sum_mounting_sizes
+from ops.api.utils import sum_mounting_sizes, get_selection_params_serializer_class
 from ops.choices import ERPSyncType, AttributeUsageChoices, AttributeType
 from ops.loads.utils import get_suitable_loads
 from ops.marking_compiler import get_jinja2_env
@@ -59,6 +62,7 @@ from ops.models import (
     Variant, ERPSync, BaseComposition
 )
 from ops.resources import get_resources_list
+from ops.services import get_selection_available_options_class
 from ops.services.clone_utils import get_model_fields_for_clone, generate_unique_copy_name, clone_image_field
 from ops.services.product_selection import ProductSelectionAvailableOptions
 from ops.services.shock_calc_service import calculate_shock_block
@@ -283,10 +287,13 @@ class ProjectItemViewSet(CustomModelViewSet):
     permission_classes = [ProjectItemPermission]
 
     def get_serializer_class(self):
-        if self.action in ["set_selection", "calculate", "update_item"]:
+        if self.action in [
+            "get_sketch", "get_subsketch", "set_selection", "calculate", "update_item"
+        ]:
             return Serializer
-        if self.action in ["get_sketch", "get_subsketch"]:
-            return GetSketchSerializer
+
+        if self.action == "set_product_family":
+            return ProjectItemSetProductFamilySerializer
 
         return ProjectItemSerializer
 
@@ -302,55 +309,92 @@ class ProjectItemViewSet(CustomModelViewSet):
     def perform_create(self, serializer):
         serializer.save(project_id=self.kwargs["project_pk"])
 
+    @action(methods=["POST"], detail=True)
+    def set_product_family(self, request, project_pk, pk):
+        """
+        Устанавливает семейство изделий для элемента табличной части проекта.
+
+        После установки семейства, параметры подбора изделий будут сброшены.
+        """
+        project_item = self.get_object()
+
+        serializer_class = self.get_serializer_class()
+        serializer = serializer_class(data=request.data, instance=project_item)
+        serializer.is_valid(raise_exception=True)
+
+        data = serializer.validated_data
+        product_family = data.get("product_family")
+
+        project_item.product_family = product_family
+        project_item.selection_params = None
+        project_item.save()
+
+        serializer = ProjectItemSerializer(project_item)
+        data = serializer.data
+
+        return Response(data)
+
     @action(methods=['GET'], detail=True)
     def selection_params(self, request, project_pk, pk):
-        project_item = ProjectItem.objects.get(project_id=project_pk, pk=pk)
+        """
+        Возвращает параметры подбора для элемента табличной части проекта.
 
-        selection_type = request.query_params.get('selection_type', 'product_selection')
+        Если параметры подбора не установлены, то возвращает параметры по умолчанию.
+        """
+        project_item = self.get_object()
 
-        if selection_type not in ['product_selection', 'shock_selection', 'ssg_selection', WVD_SELECTION_TYPE]:
-            return Response({
-                'detail': f'Некорректный selection_type: {selection_type}'
-            }, status=400)
+        product_family = project_item.product_family
+
+        if not product_family:
+            raise ProjectItemProductFamilyNotSet
+
+        selection_type = product_family.selection_type
+
+        if not selection_type:
+            raise ProjectItemSelectionTypeNotSet
 
         if project_item.selection_params:
             return Response(project_item.selection_params)
 
-        if selection_type == 'product_selection':
-            params = ProductSelectionAvailableOptions.get_default_params()
-        elif selection_type == 'ssg_selection':
-            params = SpacerSelectionAvailableOptions.get_default_params()
-        elif selection_type == WVD_SELECTION_TYPE:
-            params = WVDSelectionAvailableOptions.get_default_params()
-        else:
-            params = ShockSelectionAvailableOptions.get_default_params()
+        try:
+            available_options = get_selection_available_options_class(selection_type)
+        except ValueError as exc:
+            return Response({
+                "detail": str(exc)
+            }, status=400)
+
+        params = available_options.get_default_params()
 
         return Response(params)
 
     @action(methods=['POST'], detail=True)
     def set_selection(self, request, project_pk, pk) -> Response:
-        data = request.data
+        """
+        Устанавливает параметры подбора для элемента табличной части проекта.
+        """
+        project_item = self.get_object()
 
-        project_item = ProjectItem.objects.get(project_id=project_pk, pk=pk)
+        product_family = project_item.product_family
 
-        selection_type = request.query_params.get('selection_type', 'product_selection')
+        if not product_family:
+            raise ProjectItemProductFamilyNotSet
 
-        if selection_type not in ['product_selection', 'shock_selection', 'ssg_selection', WVD_SELECTION_TYPE]:
+        selection_type = product_family.selection_type
+
+        if not selection_type:
+            raise ProjectItemSelectionTypeNotSet
+
+        try:
+            serializer_class = get_selection_params_serializer_class(selection_type)
+        except ValueError as exc:
             return Response({
-                'detail': f'Некорректный selection_type: {selection_type}'
+                "detail": str(exc)
             }, status=400)
 
-        if selection_type == 'product_selection':
-            selection_params_serializer = SelectionParamsSerializer(data=data)
-        elif selection_type == 'ssg_selection':
-            selection_params_serializer = SpacerSelectionParamsSerializer(data=data)
-        elif selection_type == WVD_SELECTION_TYPE:
-            selection_params_serializer = WVDSelectionParamsSerializer(data=data)
-        else:
-            selection_params_serializer = ShockSelectionParamsSerializer(data=data)
-        selection_params_serializer.is_valid(raise_exception=True)
+        serializer = serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
-        project_item.selection_params = selection_params_serializer.data
+        project_item.selection_params = serializer.validated_data
         project_item.save()
 
         serializer = ProjectItemSerializer(project_item)
@@ -360,23 +404,29 @@ class ProjectItemViewSet(CustomModelViewSet):
 
     @action(methods=['POST'], detail=True)
     def get_selection_options(self, request, project_pk, pk):
-        selection_type = request.query_params.get('selection_type', 'product_selection')
+        """
+        Возвращает доступные опции для подбора изделий для элемента табличной части проекта.
+        """
+        project_item = self.get_object()
 
-        if selection_type not in ['product_selection', 'shock_selection', 'ssg_selection', WVD_SELECTION_TYPE]:
+        product_family = project_item.product_family
+
+        if not product_family:
+            raise ProjectItemProductFamilyNotSet
+
+        selection_type = product_family.selection_type
+
+        if not selection_type:
+            raise ProjectItemSelectionTypeNotSet
+
+        try:
+            available_options_class = get_selection_available_options_class(selection_type)
+        except ValueError as exc:
             return Response({
-                'detail': f'Некорректный selection_type: {selection_type}'
+                "detail": str(exc)
             }, status=400)
 
-        project_item = ProjectItem.objects.get(project_id=project_pk, pk=pk)
-
-        if selection_type == 'product_selection':
-            available_options = ProductSelectionAvailableOptions(project_item).get_available_options()
-        elif selection_type == 'ssg_selection':
-            available_options = SpacerSelectionAvailableOptions(project_item).get_available_options()
-        elif selection_type == WVD_SELECTION_TYPE:
-            available_options = WVDSelectionAvailableOptions(project_item).get_available_options()
-        else:
-            available_options = ShockSelectionAvailableOptions(project_item).get_available_options()
+        available_options = available_options_class(project_item).get_available_options()
 
         return Response(available_options)
 
@@ -505,24 +555,28 @@ class ProjectItemViewSet(CustomModelViewSet):
         """
         Создает или обновляет Item (изделие) для табличной части проекта.
         """
-        selection_type = request.query_params.get('selection_type', 'product_selection')
+        project_item = self.get_object()
 
-        if selection_type not in ['product_selection', 'shock_selection', WVD_SELECTION_TYPE]:
+        product_family = project_item.product_family
+
+        if not product_family:
+            raise ProjectItemProductFamilyNotSet
+
+        selection_type = product_family.selection_type
+
+        if not selection_type:
+            raise ProjectItemSelectionTypeNotSet
+
+        try:
+            available_options_class = get_selection_available_options_class(selection_type)
+        except ValueError as exc:
             return Response({
-                'detail': f'Некорректный selection_type: {selection_type}'
+                "detail": str(exc)
             }, status=400)
 
-        project_item = ProjectItem.objects.get(project_id=project_pk, pk=pk)
-
-        if selection_type == 'product_selection':
-            selection = ProductSelectionAvailableOptions(project_item)
-        elif selection_type == WVD_SELECTION_TYPE:
-            selection = WVDSelectionAvailableOptions(project_item)
-        else:
-            selection = ShockSelectionAvailableOptions(project_item)
-
+        selection = available_options_class(project_item)
         available_options = selection.get_available_options()
-        specifications = available_options.get('specification', [])
+        specifications = available_options.get("specifications", [])
         parameters, locked_parameters = selection.get_parameters(available_options)
 
         if selection_type == 'shock_selection':
@@ -543,8 +597,10 @@ class ProjectItemViewSet(CustomModelViewSet):
                 }, status=400)
 
         if project_item.original_item:
-            item = selection.update_item(request.user, project_item.original_item, parameters, locked_parameters,
-                                         specifications)
+            item = selection.update_item(
+                request.user, project_item.original_item, parameters, locked_parameters,
+                                         specifications,
+            )
         else:
             item = selection.create_item(request.user, parameters, locked_parameters, specifications)
 

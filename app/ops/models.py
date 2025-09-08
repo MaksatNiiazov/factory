@@ -131,6 +131,10 @@ class ProjectItem(SoftDeleteModelMixin, models.Model):
         null=True, blank=True,
     )
 
+    product_family = models.ForeignKey(
+        ProductFamily, on_delete=models.PROTECT, related_name="+", null=True, blank=True,
+        verbose_name=_("Семейство изделий"),
+    )
     selection_params = models.JSONField(null=True, blank=True, verbose_name=_('Параметры подбора'))
 
     # TODO временно сохраним выбранный вариант пружины, так как нет информации по пружинным блокам
@@ -326,29 +330,6 @@ class ProjectItem(SoftDeleteModelMixin, models.Model):
             counter += 1
 
         return "\n".join(numbered_lines)
-
-    def get_available_selection(self):
-        # TODO: Временные способ, поменять
-        from ops.services.product_selection import ProductSelectionAvailableOptions
-        from ops.services.shock_selection import ShockSelectionAvailableOptions
-        from ops.services.spacer_selection import SpacerSelectionAvailableOptions
-
-        selection_params = self.selection_params
-
-        if not selection_params:
-            return None
-
-        product_class_id = selection_params["product_class"]
-        product_class = ProductClass.objects.get(id=product_class_id)
-
-        if product_class.name in ["Подвес переменного усилия", "Опора переменного усилия"]:
-            return ProductSelectionAvailableOptions(self)
-        if product_class.name == "Гидроамортизаторы":
-            return ShockSelectionAvailableOptions(self)
-        if product_class.name == "Распорки":
-            return SpacerSelectionAvailableOptions(self)
-
-        return None
 
     def save(self, *args, **kwargs):
         """

@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from django.db.models import QuerySet
 
 from catalog.models import ProductFamily
+
 from ops.choices import AttributeType, AttributeCatalog
 from ops.models import Attribute, ItemChild, Variant, Item, BaseComposition
 
@@ -12,8 +13,6 @@ class BaseSelectionAvailableOptions:
     @classmethod
     def get_default_params(cls):
         params = {
-            'product_class': None,
-            'product_family': None,
             'variant': None,
         }
         return params
@@ -130,13 +129,9 @@ class BaseSelectionAvailableOptions:
 
     def get_product_family(self) -> Optional[ProductFamily]:
         """
-        Возвращает выбранное семейство изделия по идентификатору в параметрах,
-        либо None, если семейство не выбрано.
+        Возвращает ProductFamily для текущего ProjectItem.
         """
-        if not self.params['product_family']:
-            return None
-
-        return ProductFamily.objects.get(id=self.params['product_family'])
+        return self.project_item.product_family
 
     def get_variant(self):
         variant_id = self.params['variant']
@@ -206,7 +201,8 @@ class BaseSelectionAvailableOptions:
         raise NotImplementedError("Метод get_parameters должен быть реализован в подклассе.")
 
     def update_item(self, author, item: Item, parameters: Optional[Dict] = None,
-                    locked_parameters: Optional[List] = None, specifications: Optional[List] = None) -> Item:
+                    locked_parameters: Optional[List] = None, specifications: Optional[List] = None,
+    ) -> Item:
         current_parameters = item.parameters
 
         if not current_parameters:

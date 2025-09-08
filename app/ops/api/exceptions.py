@@ -14,6 +14,18 @@ class ProjectNotFound(NotFound):
     default_detail = _('Проект не найден.')
 
 
+class ProjectItemProductFamilyNotSet(APIException):
+    status_code = status.HTTP_400_BAD_REQUEST
+    default_detail = _("Не указана семейство изделий для данного элемента табличной части проекта.")
+    default_code = "project_item_product_family_not_set"
+
+
+class ProjectItemSelectionTypeNotSet(APIException):
+    status_code = status.HTTP_400_BAD_REQUEST
+    default_detail = _("Не указан тип подбора для данного элемента табличной части проекта.")
+    default_code = "project_item_selection_type_not_set"
+
+
 class FormatNotSupported(APIException):
     status_code = status.HTTP_400_BAD_REQUEST
     default_detail = _('Формат файла не поддерживается.')

@@ -45,3 +45,9 @@ class ClampSelectionEntryResult(MaxLengthMixin, TextChoices):
     UNLIMITED = "unlimited", _("Собирается без ограничений")
     ADAPTER_REQUIRED = "adapter_required", _("Собирается через переходник")
     NOT_POSSIBLE = "not_possible", _("Не собирается")
+
+
+class SelectionType(MaxLengthMixin, TextChoices):
+    PRODUCT_SELECTION = "product_selection", _("Подбор переменок")
+    SSG_SELECTION = "ssg_selection", _("Подбор распорок")
+    SHOCK_SELECTION = "shock_selection", _("Подбор гидроамортизаторов")

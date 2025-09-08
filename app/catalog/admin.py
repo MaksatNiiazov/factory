@@ -110,12 +110,12 @@ class ProductClassAdmin(admin.ModelAdmin):
 
 @admin.register(ProductFamily)
 class ProductFamilyAdmin(admin.ModelAdmin):
-    list_display = ('id', 'product_class', 'name', 'is_upper_mount_selectable', 'has_rod')
-    list_display_links = ('id', 'name')
-    list_filter = ('is_upper_mount_selectable', 'has_rod')
-    search_fields = ('name', 'product_class__name')
-    readonly_fields = ('id',)
-    fields = ('id', 'product_class', 'name', 'icon', 'is_upper_mount_selectable', 'has_rod')
+    list_display = ("id", "product_class", "name", "is_upper_mount_selectable", "has_rod", "selection_type")
+    list_display_links = ("id", "name")
+    list_filter = ("is_upper_mount_selectable", "has_rod", "selection_type")
+    search_fields = ("name", "product_class__name")
+    readonly_fields = ("id",)
+    fields = ("id", "product_class", "name", "icon", "is_upper_mount_selectable", "has_rod", "selection_type")
 
 
 @admin.register(Load)
@@ -142,23 +142,24 @@ class SupportDistanceAdmin(admin.ModelAdmin):
 
 @admin.register(PipeMountingGroup)
 class PipeMountingGroupAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name')
-    list_display_links = ('id', 'name')
-    filter_horizontal = ('variants',)
-    search_fields = ('name', 'variants__detail_type__designation', 'variants_detail_type__name')
+    list_display = ("id", "name", "show_variants")
+    list_display_links = ("id", "name")
+    list_filter = ("show_variants",)
+    filter_horizontal = ("variants",)
+    search_fields = ("name", "variants__detail_type__designation", "variants_detail_type__name")
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        return qs.prefetch_related('variants')
+        return qs.prefetch_related("variants")
 
-    @admin.display(description='Типы креплений')
+    @admin.display(description="Типы креплений")
     def get_variants(self, obj):
         variants = list(obj.variants.all()[:5])
-        names = [f'{variant.detail_type.designation} - {variant.detail_type.name}' for variant in variants]
+        names = [f"{variant.detail_type.designation} - {variant.detail_type.name}" for variant in variants]
 
         if obj.variants.count() > 5:
-            return ', '.join(names) + ', ...'
-        return ', '.join(names)
+            return ", ".join(names) + ", ..."
+        return ", ".join(names)
 
 
 @admin.register(PipeMountingRule)

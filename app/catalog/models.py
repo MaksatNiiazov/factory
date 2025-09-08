@@ -9,7 +9,7 @@ from pybarker.contrib.modelshistory.models import HistoryModelTracker
 
 from catalog.choices import (
     MaterialType, FieldTypeChoices, Standard, SeriesNameChoices, PipeDirectionChoices,
-    ComponentGroupType, ClampSelectionEntryResult,
+    ComponentGroupType, ClampSelectionEntryResult, SelectionType,
 )
 from catalog.managers import ClampMaterialCoefficientManager, PipeDiameterSoftDeleteManager, PipeDiameterAllObjectsManager
 from kernel.mixins import SoftDeleteModelMixin
@@ -479,6 +479,11 @@ class ProductFamily(CatalogMixin, SoftDeleteModelMixin, models.Model):
         default=False, blank=True, verbose_name=_("Альтернативный расчет высоты за счет регулировки штока"),
     )
 
+    selection_type = models.CharField(
+        max_length=SelectionType.get_max_length(), null=True, blank=True, choices=SelectionType.choices,
+        verbose_name=_("Тип подбора"),
+    )
+
     class Meta:
         verbose_name = _("Семейство изделий")
         verbose_name_plural = _("Семейства изделий")
@@ -549,6 +554,7 @@ class SpringStiffness(CatalogMixin, SoftDeleteModelMixin, models.Model):
 class PipeMountingGroup(CatalogMixin, SoftDeleteModelMixin, models.Model):
     name = models.CharField(max_length=255, verbose_name=_("Наименование"))
     variants = models.ManyToManyField("ops.Variant", blank=True, related_name="+", verbose_name=_("Типы креплений"))
+    show_variants = models.BooleanField(default=False, verbose_name=_("Показывать исполнения вместо деталей"))
 
     class Meta:
         verbose_name = _("Группа креплений к трубе")

@@ -1,7 +1,33 @@
 from typing import Tuple
-from ..choices import AttributeUsageChoices
-from ..models import Attribute
+
 from constance import config
+
+from ops.choices import AttributeUsageChoices
+from ops.models import Attribute
+
+from ops.api.serializers import (
+    SelectionParamsSerializer,
+    SpacerSelectionParamsSerializer,
+    ShockSelectionParamsSerializer,
+)
+
+SELECTION_SERIALIZERS = {
+    "product_selection": SelectionParamsSerializer,
+    "ssg_selection": SpacerSelectionParamsSerializer,
+    "shock_selection": ShockSelectionParamsSerializer,
+}
+
+
+def get_selection_params_serializer_class(selection_type: str):
+    """
+    Получает сериализатор параметров для указанного типа подбора.
+    """
+    serializer_class = SELECTION_SERIALIZERS.get(selection_type)
+
+    if not serializer_class:
+        raise ValueError(f"Не найден сериализатор для типа подбора: {selection_type}")
+
+    return serializer_class
 
 
 def get_extended_range(L2_avg: float, sn: float, stroke: float) -> Tuple[float, float]:

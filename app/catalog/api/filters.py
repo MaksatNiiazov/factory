@@ -145,16 +145,18 @@ SupportDistanceFilter = create_filterset(SupportDistance, {
 })
 
 ProductFamilyFilter = create_filterset(ProductFamily, {
-    'product_class': lookups.FOREIGN_KEY_LOOKUPS,
-    'name': lookups.STRING_LOOKUPS,
-    'is_upper_mount_selectable': lookups.BOOLEAN_LOOKUPS,
-    'has_rod': lookups.BOOLEAN_LOOKUPS,
+    "product_class": lookups.FOREIGN_KEY_LOOKUPS,
+    "name": lookups.STRING_LOOKUPS,
+    "is_upper_mount_selectable": lookups.BOOLEAN_LOOKUPS,
+    "has_rod": lookups.BOOLEAN_LOOKUPS,
+    "selection_type": lookups.CHOICES_LOOKUPS,
 })
 
 
 PipeMountingGroupFilter = create_filterset(PipeMountingGroup, {
-    'name': lookups.STRING_LOOKUPS,
-    'variants': lookups.ARRAY_LOOKUPS,
+    "name": lookups.STRING_LOOKUPS,
+    "show_variants": lookups.BOOLEAN_LOOKUPS,
+    "variants": lookups.ARRAY_LOOKUPS,
 })
 
 

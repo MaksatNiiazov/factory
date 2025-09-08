@@ -28,8 +28,6 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
     @classmethod
     def get_default_params(cls):
         params = {
-            'product_class': None,
-            'product_family': None,
             'pipe_options': {
                 'location': ProjectItem.HORIZONTAL,
                 'direction': ProjectItem.X,
@@ -74,9 +72,10 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
                 'pipe_mounting_group': None,
                 'add_to_specification': True,
             },
-            'pipe_clamp': {
-                'pipe_mount': None,
-                'top_mount': None,
+            "pipe_clamp": {
+                "pipe_mount_type": None,
+                "pipe_mount": None,
+                "top_mount": None,
             },
             'system_settings': {
                 'system_height': None,
@@ -206,7 +205,7 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
         test_load_y = self.params['load_and_move'].get('test_load_y')
         test_load_z = self.params['load_and_move'].get('test_load_z')
 
-        product_family = self.get_selected_product_family()
+        product_family = self.get_product_family()
 
         if not product_family:
             self.debug.append('#Пружинные блоки: Необходимо выбрать семейство изделия.')
@@ -258,13 +257,14 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
         """
         pipe_mounting_groups = PipeMountingGroup.objects.all()
 
-        if not self.params['product_family'] or self.params['pipe_options']['direction'] not in ['x', 'y', 'z']:
+        if not self.get_product_family() or self.params['pipe_options']['direction'] not in ['x', 'y', 'z']:
             self.debug.append(
-                '#Тип крепления к трубе: Не выбран семейство изделии или направление трубы не "X" или "Y" или "Z".')
+                '#Тип крепления к трубе: Не выбран семейство изделии или направление трубы не "X" или "Y" или "Z".'
+            )
             return PipeMountingGroup.objects.none()
 
         rule = PipeMountingRule.objects.filter(
-            family=self.params['product_family'],
+            family=self.get_product_family(),
             num_spring_blocks=self.params['pipe_options']['branch_qty'],
             pipe_direction=self.params['pipe_options']['direction'],
         ).first()
@@ -321,7 +321,7 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
             hanger_load_group_ids = self.get_load_group_ids_by_lgv()
 
             entry = ClampSelectionEntry.objects.filter(
-                matrix__product_families=self.get_selected_product_family(),
+                matrix__product_families=self.get_product_family(),
                 matrix__clamp_detail_types=pipe_mount.variant.detail_type,
                 hanger_load_group=self.get_lgv(),
                 clamp_load_group=load_group_lgv,
@@ -386,18 +386,16 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
     def get_selected_pipe_mount_id(self) -> Optional[int]:
         return self.params['pipe_clamp']['pipe_mount']
 
+    def get_selected_pipe_mount_type(self):
+        pipe_mount_type = self.params["pipe_clamp"]["pipe_mount_type"] or "item"
+        return pipe_mount_type
+
+    def get_selected_pipe_mount_item_as_variant(self):
+        pipe_mount_id = self.params["pipe_clamp"]["pipe_mount"]
+        return Variant.objects.get(id=pipe_mount_id)
+
     def get_selected_top_mount_id(self) -> Optional[int]:
         return self.params['pipe_clamp']['top_mount']
-
-    def get_selected_product_family(self) -> Optional[ProductFamily]:
-        """
-        Возвращает объект семейства изделий (ProductFamily) по выбранному идентификатору.
-        Если идентификатор не задан - возвращает None.
-        """
-        if not self.params['product_family']:
-            return None
-
-        return ProductFamily.objects.get(id=self.params['product_family'])
 
     def get_clamp_material(self) -> Optional[Material]:
         """
@@ -715,7 +713,7 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
         lgv = self.get_lgv()
 
         matrix = ClampSelectionMatrix.objects.filter(
-            product_families=self.get_selected_product_family(),
+            product_families=self.get_product_family(),
             clamp_detail_types=variant.detail_type,
         ).prefetch_related('entries').first()
 
@@ -791,19 +789,26 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
         return list(set(found_item_ids))
 
-    def get_available_pipe_clamps(self) -> List[int]:
+    def get_selected_pipe_mounting_group(self):
+        if not self.params['pipe_params']['pipe_mounting_group']:
+            self.debug.append('#Выбор крепления к трубе: Не выбран тип крепления к трубе.')
+            return None
+
+        pipe_mounting_group = PipeMountingGroup.objects.get(id=self.params['pipe_params']['pipe_mounting_group'])
+        return pipe_mounting_group
+
+    def get_available_pipe_clamp_variants(self, pipe_mounting_group):
+        self.debug.append(f"#Выбор крепления к трубе: Показываю список исполнений вместо деталей.")
+        return list(pipe_mounting_group.variants.values_list("id", flat=True))
+
+    def get_available_pipe_clamps(self, pipe_mounting_group) -> List[int]:
         """
         Возвращает список ID подходящих креплений к трубе (Item), включая хомуты, башмаки и при необходимости - траверсы.
         Фильтрация выполняется по типа крепления, материалу, DN, нагрузочной группе, толщине изоляции, монтажному размеру.
         """
         self.debug.append('#Выбор крепления к трубе: Начинаю процесс поиска.')
-        if not self.params['pipe_params']['pipe_mounting_group']:
-            self.debug.append('#Выбор крепления к трубе: Не выбран тип крепления к трубе.')
-            return []
-
         pipe_clamps = Item.objects.all()
         self.debug.append(f'#Выбор крепления к трубе: Этап 1, получаю все айтемы {pipe_clamps.count()}')
-        pipe_mounting_group = PipeMountingGroup.objects.get(id=self.params['pipe_params']['pipe_mounting_group'])
         pipe_clamps = pipe_clamps.filter(variant__in=pipe_mounting_group.variants.all())
         self.debug.append(
             f'#Выбор крепления к трубе: Этап 2, айтемы после фильтрации типом крепления к трубе {pipe_clamps.count()}'
@@ -938,14 +943,14 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
         если семейство изделия поддерживает выборв ерхнего соединения.
         Если не выбрано семейство или выбор недоступен - возвращается пустой список.
         """
-        if not self.params['product_family']:
+        if not self.get_product_family():
             self.debug.append(
                 '#Выбор верхнего соединения: Не выбран семейство изделии для списка "Выбор верхнего соединения". '
                 'Возвращаем пустой список.'
             )
             return []
 
-        family = ProductFamily.objects.get(id=self.params['product_family'])
+        family = self.get_product_family()
 
         if not family.is_upper_mount_selectable:
             self.debug.append(
@@ -975,7 +980,7 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
         size = selected_spring['size']
         rated_stroke = selected_spring['rated_stroke']
 
-        product_family = self.get_selected_product_family()
+        product_family = self.get_product_family()
 
         if not product_family:
             self.debug.append('#Пружинный блок: Не выбран семейство изделии.')
@@ -1476,23 +1481,71 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
             )
             return None, None, None
 
-        pipe_mount_item, zom = self.get_pipe_mount_item()
+        pipe_mount_type = self.get_selected_pipe_mount_type()
 
-        if not pipe_mount_item:
-            self.debug.append(f"Поиск DetailType: Не найдено подходящее крепление к трубе (id={pipe_mount}).")
+        component_group = ComponentGroup.objects.filter(group_type=ComponentGroupType.STUDS).first()
+
+        if not component_group:
+            self.debug.append('#Поиск DetailType: Не найден группа компонентов с типом "Шпильки"')
             return None, None, None
 
-        items_for_specification.append(pipe_mount_item)
+        stud_detail_types = component_group.detail_types.all()
 
-        variants = self.filter_suitable_variants_via_child(variants, pipe_mount_item, count=1)
+        if pipe_mount_type == "variant":
+            self.debug.append(f"#Поиск DetailType: pipe_mount_type == variant")
+            pipe_mount_variant = self.get_selected_pipe_mount_item_as_variant()
+            self.debug.append(f"#Поиск DetailType: Выбарнный исполнение pipe_mount_variant: {pipe_mount_variant}")
+            base_compositions = pipe_mount_variant.base_parent.all()
+            load_group_ids = self.get_load_group_ids_by_lgv()
 
-        if zom:
-            items_for_specification.append(zom)
+            for base_composition in base_compositions:
+                self.debug.append(f"Базовый состав: {base_composition}")
+                bc_found_item = None
+                if base_composition.base_child in stud_detail_types:
+                    continue
 
-            variants = self.filter_suitable_variants_via_child(variants, zom, count=branch_qty)
+                if base_composition.base_child_variant:
+                    suitable_item = Item.objects.filter(
+                        variant=base_composition.base_child_variant, parameters__LGV__in=load_group_ids,
+                    ).first()
+                    bc_found_item = suitable_item
+                    self.debug.append(f"Найденный Item для базового состава: {suitable_item}")
+                else:
+                    variants = Variant.objects.filter(detail_type=base_composition.base_child)
+                    for variant in variants:
+                        suitable_item = Item.objects.filter(
+                            variant=variant, parameters__LGV__in=load_group_ids,
+                        ).first()
+
+                        if suitable_item:
+                            bc_found_item = suitable_item
+                            self.debug.append(f"Найденный Item для базового состава: {suitable_item}")
+                            break
+
+                if bc_found_item:
+                    variants = self.filter_suitable_variants_via_child(variants, bc_found_item, count=base_composition.count)
+                    items_for_specification.append(bc_found_item)
+                else:
+                    self.debug.append(f"Поиск DetailType: Не найден айтем для базового состава {base_composition}")
+                    return None, None, None
+        else:
+            pipe_mount_item, zom = self.get_pipe_mount_item()
+
+            if not pipe_mount_item:
+                self.debug.append(f"Поиск DetailType: Не найдено подходящее крепление к трубе (id={pipe_mount}).")
+                return None, None, None
+
+            items_for_specification.append(pipe_mount_item)
+
+            variants = self.filter_suitable_variants_via_child(variants, pipe_mount_item, count=1)
+
+            if zom:
+                items_for_specification.append(zom)
+
+                variants = self.filter_suitable_variants_via_child(variants, zom, count=branch_qty)
 
         top_mount = self.get_selected_top_mount_id()
-        product_family = self.get_selected_product_family()
+        product_family = self.get_product_family()
 
         if product_family.is_upper_mount_selectable:
             if not top_mount:
@@ -1509,14 +1562,6 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
         if not variants.exists():
             self.debug.append('#Поиск DetailType: Не найдено ни одного подходящего исполнения.')
             return None, None, None
-
-        component_group = ComponentGroup.objects.filter(group_type=ComponentGroupType.STUDS).first()
-
-        if not component_group:
-            self.debug.append('#Поиск DetailType: Не найден группа компонентов с типом "Шпильки"')
-            return None, None, None
-
-        stud_detail_types = component_group.detail_types.all()
 
         variants = variants.annotate(
             stud_composition_count=Count(
@@ -1743,7 +1788,18 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
         available_directions = self.get_available_pipe_directions(selected_location)
         available_branch_counts = self.get_available_branch_counts(selected_location)
 
-        available_pipe_clamps = self.get_available_pipe_clamps()
+        pipe_mounting_group = self.get_selected_pipe_mounting_group()
+
+        if pipe_mounting_group and pipe_mounting_group.show_variants:
+            available_pipe_clamps_type = "variant"
+            available_pipe_clamps = self.get_available_pipe_clamp_variants(pipe_mounting_group)
+        elif pipe_mounting_group:
+            available_pipe_clamps_type = "item"
+            available_pipe_clamps = self.get_available_pipe_clamps(pipe_mounting_group)
+        else:
+            available_pipe_clamps_type = "item"
+            available_pipe_clamps = []
+
         available_top_mounts = self.get_available_top_mounts()
 
         suitable_variant, calculated_system_height, items_for_specification = self.get_suitable_variant()
@@ -1791,6 +1847,7 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
             'spring_choice': self.calculate_load(),
             'pipe_params': self.get_pipe_params(),
             'pipe_clamp': {
+                "pipe_mount_type": available_pipe_clamps_type,
                 'pipe_mounts': available_pipe_clamps,
                 'top_mount': available_top_mounts,
             },

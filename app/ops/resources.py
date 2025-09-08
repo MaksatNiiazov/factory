@@ -257,10 +257,13 @@ class Base(resources.ModelResource, metaclass=DehydrateMetaClass):
                 v.name.strip().lower(): v for v in Variant.objects.filter(deleted_at=None, detail_type=self.detail_type)
             }
             self.variant_attrs = set(
-                Attribute.objects.filter(variant__detail_type=self.detail_type).values_list('name', flat=True))
+                Attribute.objects.filter(deleted_at=None, variant__detail_type=self.detail_type).values_list('name',
+                                                                                                             flat=True)
+            )
             self.base_attrs = set(
-                Attribute.objects.filter(detail_type=self.detail_type, variant__isnull=True).values_list('name',
-                                                                                                         flat=True))
+                Attribute.objects.filter(deleted_at=None, detail_type=self.detail_type,
+                                         variant__isnull=True).values_list('name', flat=True)
+            )
             mats = list(Material.objects.all())
             self.materials_by_id = {m.id: m for m in mats if m.id is not None}
             self.materials_by_name = {m.name.strip().lower(): m for m in mats if m.name}
@@ -318,34 +321,6 @@ class Base(resources.ModelResource, metaclass=DehydrateMetaClass):
         elif column_name in getattr(self, 'allowed_parameter_fields', set()):
             obj.parameters[column_name] = value
 
-    def save_instance(self, instance, is_new, row, **kwargs):
-        dry_run = kwargs.get("dry_run")
-        using_transactions = kwargs.get("using_transactions")
-
-        try:
-            print(f"[DEBUG] save_instance(before): "
-                  f"id={getattr(instance, 'id', None)}, "
-                  f"is_new={is_new}, "
-                  f"variant={getattr(instance, 'variant', None)}, "
-                  f"parameters={getattr(instance, 'parameters', None)}, "
-                  f"dry_run={dry_run}, using_transactions={using_transactions}")
-        except Exception as e:
-            print(f"[DEBUG][save_instance(before)][ERROR] {e!r}")
-
-        super().save_instance(instance, is_new, row, **kwargs)
-
-        try:
-            if not dry_run and getattr(instance, 'pk', None):
-                fresh = Item.objects.get(pk=instance.pk)
-                params = getattr(fresh, 'parameters', {}) or {}
-                print(f"[DEBUG] save_instance(after): id={fresh.id}, "
-                      f"has_m={'m' in params}, m_val={params.get('m')!r}, "
-                      f"parameters={params}")
-            else:
-                print(f"[DEBUG] save_instance(after): dry_run={dry_run}, pk={getattr(instance, 'pk', None)}")
-        except Exception as e:
-            print(f"[DEBUG][save_instance(after)][ERROR] {e!r}")
-
     def after_import(self, dataset: Any, result: Any, using_transactions: bool, dry_run: bool, **kwargs):
         items = Item.objects.select_related('type').filter(Q(name__isnull=True) | Q(name=''))
         to_update = []
@@ -372,7 +347,7 @@ class Base(resources.ModelResource, metaclass=DehydrateMetaClass):
 def get_resources_list() -> List[Type[Base]]:
     classes = []
     cats_and_desigs = DetailType.objects.values_list('category', 'designation').distinct()
-    all_attrs = Attribute.objects.select_related('variant__detail_type', 'detail_type')
+    all_attrs = Attribute.objects.filter(deleted_at=None).select_related('variant__detail_type', 'detail_type')
 
     variant_attrs_map = defaultdict(set)
     base_attrs_map = defaultdict(set)

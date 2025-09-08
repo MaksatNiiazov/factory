@@ -9,6 +9,7 @@ from fpdf import FPDF
 from catalog.models import Material
 from ops.choices import AttributeUsageChoices, AttributeCatalog
 from ops.models import TemporaryComposition, DetailType
+from ops.services import get_selection_available_options_class
 from ops.utils import work_with_image, calculate_image_position
 
 WIDTH = 420
@@ -330,7 +331,8 @@ def draw_specifications(pdf, project_item, composition_type):
 def draw_attributes(pdf, project_item, created_by, created_date):
     pdf.set_font('ArialNarrow', size=9)
 
-    available_selection = project_item.get_available_selection()
+    available_selection_class = get_selection_available_options_class(project_item.selection_type)
+    available_selection = available_selection_class(project_item)
     data_for_sketch = available_selection.get_data_for_sketch()
 
     x_start = 225

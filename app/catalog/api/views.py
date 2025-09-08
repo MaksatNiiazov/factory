@@ -442,14 +442,20 @@ class ProductClassViewSet(ModelViewSet):
 class ProductFamilyViewSet(ModelViewSet):
     """
     API для работы со справочником "Семейства изделий".
+
+    list: Получить список семейств изделий.
+    retrieve: Получить семейство изделия по ID.
+    create: Создать новое семейство изделия.
+    partial_update: Изменить семейство изделия.
+    destroy: Удалить семейство изделия.
     """
     queryset = ProductFamily.objects.all()
     serializer_class = ProductFamilySerializer
     filter_backends = [DjangoFilterBackend, SearchFilter]
     filterset_class = ProductFamilyFilter
 
-    ordering = ['name']
-    search_fields = ['name']
+    ordering = ["id", "product_class", "name"]
+    search_fields = ["product_class__name", "name"]
 
 
 class LoadViewSet(ModelViewSet):

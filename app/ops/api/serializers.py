@@ -1,3 +1,4 @@
+from django.core.validators import MinValueValidator
 from django.utils.translation import gettext_lazy as _
 
 from rest_flex_fields import FlexFieldsModelSerializer
@@ -83,8 +84,12 @@ class PipeParamsSerializer(serializers.Serializer):
 
 
 class PipeClampSerializer(serializers.Serializer):
-    pipe_mount = serializers.PrimaryKeyRelatedField(
-        queryset=Item.objects.all(), required=True, allow_null=True, label='Выбор крепления к трубе',
+    pipe_mount_type = serializers.ChoiceField(
+        choices=[("variant", "Исполнение"), ("item", "Деталь")],
+        required=True, allow_null=True, label="Тип выбора крепления к трубе",
+    )
+    pipe_mount = serializers.IntegerField(
+        validators=[MinValueValidator(1)], required=True, allow_null=True, label="Выбор крепления к трубе",
     )
     top_mount = serializers.PrimaryKeyRelatedField(
         queryset=Item.objects.all(), required=True, allow_null=True, label='Выбор верхнего соединения',
@@ -99,12 +104,6 @@ class SystemSettingsSerializer(serializers.Serializer):
 
 
 class SelectionParamsSerializer(serializers.Serializer):
-    product_class = serializers.PrimaryKeyRelatedField(
-        queryset=ProductClass.objects.all(), required=True, allow_null=True,
-    )
-    product_family = serializers.PrimaryKeyRelatedField(
-        queryset=ProductFamily.objects.all(), required=True, allow_null=True,
-    )
     pipe_options = PipeOptionsSerializer(required=True)
     load_and_move = LoadAndMoveSerializer(required=True)
     spring_choice = SpringChoiceSerializer(required=True)
@@ -141,8 +140,8 @@ class ProjectItemSerializer(CleanSerializerMixin, FlexFieldsModelSerializer):
             'estimated_state', 'minimum_spring_travel', 'pipe_location', 'pipe_direction', 'ambient_temperature',
             'nominal_diameter', 'outer_diameter_special', 'insulation_thickness',
             'span', 'clamp_material', 'insert',
-            'crm_mark_cont', 'work_type', 'selection_params',
-            'system_height', 'comment',
+            'crm_mark_cont', 'work_type', 'system_height', 'comment',
+            "product_family", "selection_params",
         )
         extra_kwargs = {
             'revisions': {'read_only': True},
@@ -156,6 +155,12 @@ class ProjectItemSerializer(CleanSerializerMixin, FlexFieldsModelSerializer):
             'pipe_mount': 'ops.api.serializers.DetailTypeSerializer',
             'top_mount': 'ops.api.serializers.DetailTypeSerializer',
         }
+
+
+class ProjectItemSetProductFamilySerializer(CleanSerializerMixin, FlexFieldsModelSerializer):
+    class Meta:
+        model = ProjectItem
+        fields = ["product_family"]
 
 
 class ProjectSerializer(CleanSerializerMixin, FlexFieldsModelSerializer):
@@ -428,12 +433,6 @@ class ShockSelectionPipeClampSerializer(serializers.Serializer):
 
 
 class ShockSelectionParamsSerializer(serializers.Serializer):
-    product_class = serializers.PrimaryKeyRelatedField(
-        queryset=ProductClass.objects.all(), required=True, allow_null=True,
-    )
-    product_family = serializers.PrimaryKeyRelatedField(
-        queryset=ProductFamily.objects.all(), required=True, allow_null=True,
-    )
     load_and_move = ShockSelectionLoadAndMoveSerializer(required=True)
     pipe_options = ShockSelectionPipeOptionsSerializer(required=True)
     pipe_params = ShockSelectionPipeParamsSerializer(required=True)
@@ -486,12 +485,6 @@ class SpacerSelectionPipeClampSerializer(serializers.Serializer):
 
 
 class SpacerSelectionParamsSerializer(serializers.Serializer):
-    product_class = serializers.PrimaryKeyRelatedField(
-        queryset=ProductClass.objects.all(), required=True, allow_null=True,
-    )
-    product_family = serializers.PrimaryKeyRelatedField(
-        queryset=ProductFamily.objects.all(), required=True, allow_null=True,
-    )
     load_and_move = SpacerSelectionLoadAndMoveSerializer(required=True)
     pipe_options = SpacerSelectionPipeOptionsSerializer(required=True)
     pipe_params = SpacerSelectionPipeParamsSerializer(required=True)
