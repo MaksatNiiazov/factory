@@ -8,8 +8,9 @@ from constance import config
 
 from catalog.models import (
     PipeDiameter, SupportDistance, PipeMountingGroup, PipeMountingRule, Material, SSBCatalog, ClampMaterialCoefficient,
-
+    ComponentGroup,
 )
+from catalog.choices import ComponentGroupType
 
 from ops.api.constants import FN_ON_REQUEST
 from ops.api.serializers import VariantSerializer
@@ -707,6 +708,51 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
         self.debug.append('#Гидроамортизатор: Не найден подходящий гидроамортизатор.')
         return None
 
+    def get_extender_item(self, variant, length):
+        """Получение удлинителя по требуемой длине."""
+        group_type = getattr(ComponentGroupType, 'SHOCK_EXTENDERS', 'shock_extenders')
+        component_group = ComponentGroup.objects.filter(group_type=group_type).first()
+
+        if not component_group:
+            self.debug.append('#Удлинитель: Не найден ComponentGroup с типом SHOCK_EXTENDERS.')
+            return None
+
+        base_composition = BaseComposition.objects.filter(
+            base_parent_variant=variant,
+            base_child__in=component_group.detail_types.all()
+        ).first()
+
+        if not base_composition or not base_composition.base_child:
+            self.debug.append('#Удлинитель: В базовом составе отсутствует нужный detail_type.')
+            return None
+
+        detail_type = base_composition.base_child
+        length_attr = Attribute.objects.filter(
+            detail_type=detail_type,
+            usage=AttributeUsageChoices.LENGTH
+        ).first()
+
+        if not length_attr:
+            self.debug.append('#Удлинитель: Не найден атрибут длины.')
+            return None
+
+        if base_composition.base_child_variant:
+            variants_to_check = [base_composition.base_child_variant]
+        else:
+            variants_to_check = Variant.objects.filter(detail_type=detail_type)
+
+        for variant_to_check in variants_to_check:
+            item = Item.objects.filter(
+                variant=variant_to_check,
+                **{f'parameters__{length_attr.name}': length}
+            ).first()
+            if item:
+                self.debug.append(f'#Удлинитель: Найден Item {item.id} длиной {length}.')
+                return item
+
+        self.debug.append(f'#Удлинитель: Не найден подходящий Item длиной {length}.')
+        return None
+
     def is_clamp_a_required(self) -> bool:
         """
         Проверяет, требуется ли крепление A на основе наличия исполнений в группе креплений A.
@@ -1245,6 +1291,12 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
             l_final=l_final,
 
         )
+        extender_item = None
+        if shock_result.get('type') == 2 and shock_result.get('extender', 0) > 0:
+            extender_item = self.get_extender_item(variant, shock_result['extender'])
+            if extender_item:
+                items_for_specification.append(extender_item)
+                shock_result['extender_item_id'] = extender_item.id
         self.debug.append(
             f'#Подбор исполнения изделия: Возвращаем блок тип {type_}. '
             f'Исполнение {variant} (id={variant.id}) подходит.'
@@ -1280,6 +1332,12 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
             mounting_length=None,
             type_=block_type
         )
+
+        if shock_result.get('type') == 2 and shock_result.get('extender', 0) > 0:
+            extender_item = self.get_extender_item(variant, shock_result['extender'])
+            if extender_item:
+                items_for_specification.append(extender_item)
+                shock_result['extender_item_id'] = extender_item.id
 
         self.debug.append(
             f'#Подбор исполнения изделия: Возвращаем стандартный блок. '
