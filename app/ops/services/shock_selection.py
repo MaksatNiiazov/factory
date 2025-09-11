@@ -708,49 +708,49 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
         self.debug.append('#Гидроамортизатор: Не найден подходящий гидроамортизатор.')
         return None
 
-    def get_extender_item(self, variant, length):
-        """Получение удлинителя по требуемой длине."""
-        group_type = getattr(ComponentGroupType, 'SHOCK_EXTENDERS', 'shock_extenders')
+    def get_extender_item(self, variant: Variant, length: float) -> Optional[Item]:
+        """Возвращает Item удлинителя заданной длины.
+
+        При отсутствии detail_type в базовом составе поиск ведётся по всей группе.
+        """
+        group_type = getattr(ComponentGroupType, "SHOCK_EXTENDERS", "shock_extenders")
         component_group = ComponentGroup.objects.filter(group_type=group_type).first()
 
         if not component_group:
-            self.debug.append('#Удлинитель: Не найден ComponentGroup с типом SHOCK_EXTENDERS.')
+            self.debug.append("#Удлинитель: Не найден ComponentGroup с типом SHOCK_EXTENDERS.")
             return None
 
-        base_composition = BaseComposition.objects.filter(
-            base_parent_variant=variant,
-            base_child__in=component_group.detail_types.all()
-        ).first()
+        group_detail_types = list(component_group.detail_types.all())
+        base_detail_types = list(
+            BaseComposition.objects.filter(
+                base_parent_variant=variant,
+                base_child__in=group_detail_types,
+            ).values_list("base_child", flat=True)
+        )
 
-        if not base_composition or not base_composition.base_child:
-            self.debug.append('#Удлинитель: В базовом составе отсутствует нужный detail_type.')
-            return None
-
-        detail_type = base_composition.base_child
-        length_attr = Attribute.objects.filter(
-            detail_type=detail_type,
-            usage=AttributeUsageChoices.LENGTH
-        ).first()
-
-        if not length_attr:
-            self.debug.append('#Удлинитель: Не найден атрибут длины.')
-            return None
-
-        if base_composition.base_child_variant:
-            variants_to_check = [base_composition.base_child_variant]
+        if base_detail_types:
+            detail_types_to_check = base_detail_types
         else:
-            variants_to_check = Variant.objects.filter(detail_type=detail_type)
+            self.debug.append(
+                "#Удлинитель: В базовом составе отсутствует нужный detail_type. Поиск по всей группе."
+            )
+            detail_types_to_check = group_detail_types
 
-        for variant_to_check in variants_to_check:
+        length_attrs = Attribute.objects.filter(
+            detail_type__in=detail_types_to_check,
+            usage=AttributeUsageChoices.LENGTH,
+        )
+
+        for attr in length_attrs:
             item = Item.objects.filter(
-                variant=variant_to_check,
-                **{f'parameters__{length_attr.name}': length}
+                variant__detail_type=attr.detail_type,
+                **{f"parameters__{attr.name}": length},
             ).first()
             if item:
-                self.debug.append(f'#Удлинитель: Найден Item {item.id} длиной {length}.')
+                self.debug.append(f"#Удлинитель: Найден Item {item.id} длиной {length}.")
                 return item
 
-        self.debug.append(f'#Удлинитель: Не найден подходящий Item длиной {length}.')
+        self.debug.append(f"#Удлинитель: Не найден подходящий Item длиной {length}.")
         return None
 
     def is_clamp_a_required(self) -> bool:
@@ -1297,6 +1297,9 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
             if extender_item:
                 items_for_specification.append(extender_item)
                 shock_result['extender_item_id'] = extender_item.id
+                self.debug.append(
+                    f'#Удлинитель: Item {extender_item.id} добавлен в спецификацию.'
+                )
         self.debug.append(
             f'#Подбор исполнения изделия: Возвращаем блок тип {type_}. '
             f'Исполнение {variant} (id={variant.id}) подходит.'
@@ -1338,12 +1341,34 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
             if extender_item:
                 items_for_specification.append(extender_item)
                 shock_result['extender_item_id'] = extender_item.id
+                self.debug.append(
+                    f'#Удлинитель: Item {extender_item.id} добавлен в спецификацию.'
+                )
 
         self.debug.append(
             f'#Подбор исполнения изделия: Возвращаем стандартный блок. '
             f'Исполнение {variant} (id={variant.id}) подходит.'
         )
         return variant, shock_result, items_for_specification
+
+    def get_specification(self, variant: Variant, items, remove_empty: bool = False) -> List[Dict[str, Any]]:
+        specification = super().get_specification(variant, items, remove_empty)
+        existing_ids = {row['item'] for row in specification if row['item']}
+        for it in items:
+            if it.id in existing_ids:
+                continue
+            specification.append({
+                'detail_type': it.type_id,
+                'variant': it.variant_id,
+                'item': it.id,
+                'position': None,
+                'material': it.material_id,
+                'count': 1,
+            })
+            self.debug.append(
+                f'#Спецификация: Item id={it.id} добавлен без строки базового состава.'
+            )
+        return specification
 
     def _get_base_items(self) -> Optional[List[Item]]:
         """
