@@ -77,8 +77,17 @@ class PipeParamsSerializer(serializers.Serializer):
     clamp_material = serializers.PrimaryKeyRelatedField(
         queryset=Material.objects.all(), required=True, allow_null=True,
     )
-    pipe_mounting_group = serializers.PrimaryKeyRelatedField(
-        queryset=PipeMountingGroup.objects.all(), required=True, allow_null=True, label='Тип крепления к трубе',
+    pipe_mounting_group_bottom = serializers.PrimaryKeyRelatedField(
+        queryset=PipeMountingGroup.objects.all(),
+        required=True,
+        allow_null=True,
+        label='Тип крепления к трубе (нижнее)',
+    )
+    pipe_mounting_group_top = serializers.PrimaryKeyRelatedField(
+        queryset=PipeMountingGroup.objects.all(),
+        required=True,
+        allow_null=True,
+        label='Тип крепления к металлоконструкции (верхнее)',
     )
     add_to_specification = serializers.BooleanField(required=True)
 
@@ -412,10 +421,10 @@ class ShockSelectionPipeParamsSerializer(serializers.Serializer):
         queryset=SupportDistance.objects.all(), required=True, allow_null=True,
     )
     support_distance_manual = serializers.FloatField(required=True, allow_null=True)
-    mounting_group_a = serializers.PrimaryKeyRelatedField(
+    mounting_group_bottom = serializers.PrimaryKeyRelatedField(
         queryset=PipeMountingGroup.objects.all(), required=True, allow_null=True,
     )
-    mounting_group_b = serializers.PrimaryKeyRelatedField(
+    mounting_group_top = serializers.PrimaryKeyRelatedField(
         queryset=PipeMountingGroup.objects.all(), required=True, allow_null=True,
     )
     material = serializers.PrimaryKeyRelatedField(
@@ -464,10 +473,10 @@ class SpacerSelectionPipeParamsSerializer(serializers.Serializer):
         queryset=SupportDistance.objects.all(), required=False, allow_null=True,
     )
     support_distance_manual = serializers.FloatField(required=False, allow_null=True)
-    mounting_group_a = serializers.PrimaryKeyRelatedField(
+    mounting_group_bottom = serializers.PrimaryKeyRelatedField(
         queryset=PipeMountingGroup.objects.all(), required=False, allow_null=True,
     )
-    mounting_group_b = serializers.PrimaryKeyRelatedField(
+    mounting_group_top = serializers.PrimaryKeyRelatedField(
         queryset=PipeMountingGroup.objects.all(), required=False, allow_null=True,
     )
     material = serializers.PrimaryKeyRelatedField(
@@ -633,20 +642,10 @@ class WVDSelectionLoadAndMoveSerializer(serializers.Serializer):
 
 class WVDSelectionParamsSerializer(serializers.Serializer):
     """Сериализатор селектора WVDSelectionAvailableOptions."""
-    product_class = serializers.PrimaryKeyRelatedField(
-        queryset=ProductClass.objects.all(),
-        required=True,
-        allow_null=True,
-    )
-    product_family = serializers.PrimaryKeyRelatedField(
-        queryset=ProductFamily.objects.all(),
-        required=True,
-        allow_null=True,
-    )
     load_and_move = WVDSelectionLoadAndMoveSerializer(required=True)
     variant = serializers.PrimaryKeyRelatedField(
         queryset=Variant.objects.all(), required=True, allow_null=True,
     )
     selected_assembly_unit = serializers.PrimaryKeyRelatedField(
-        queryset=Item.objects.all(), required=True, allow_null=True,
+        queryset=Item.objects.all(), required=True, allow_null=True
     )

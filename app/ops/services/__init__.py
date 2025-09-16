@@ -1,12 +1,16 @@
 from ops.services.product_selection import ProductSelectionAvailableOptions
 from ops.services.shock_selection import ShockSelectionAvailableOptions
 from ops.services.spacer_selection import SpacerSelectionAvailableOptions
+from ops.services.wvd_selection import WVDSelectionAvailableOptions
+
 
 SELECTION_AVAILABLE_OPTIONS = {
     "product_selection": ProductSelectionAvailableOptions,
     "ssg_selection": SpacerSelectionAvailableOptions,
     "shock_selection": ShockSelectionAvailableOptions,
+    "wvd_selection": WVDSelectionAvailableOptions,
 }
+
 
 def get_selection_available_options_class(selection_type: str):
     """

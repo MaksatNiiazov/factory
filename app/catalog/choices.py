@@ -38,6 +38,7 @@ class ComponentGroupType(MaxLengthMixin, TextChoices):
     STUDS = "studs", _("Список шпилек")
     COUPLING = "coupling", _("Список муфт")
     FASTENER = "fastener", _("Список крепежа")
+    SHOCK_EXTENDERS = "shock_extenders", _("Список удлинителей для амортизаторов")
     SERIES_SELECTABLE = "series_selectable", _("С выбором серии")
 
 
@@ -51,3 +52,4 @@ class SelectionType(MaxLengthMixin, TextChoices):
     PRODUCT_SELECTION = "product_selection", _("Подбор переменок")
     SSG_SELECTION = "ssg_selection", _("Подбор распорок")
     SHOCK_SELECTION = "shock_selection", _("Подбор гидроамортизаторов")
+    WVD_SELECTION = "wvd_selection", _("Подбор демпферов")

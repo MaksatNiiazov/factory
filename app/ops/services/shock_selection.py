@@ -8,8 +8,9 @@ from constance import config
 
 from catalog.models import (
     PipeDiameter, SupportDistance, PipeMountingGroup, PipeMountingRule, Material, SSBCatalog, ClampMaterialCoefficient,
-
+    ComponentGroup,
 )
+from catalog.choices import ComponentGroupType
 
 from ops.api.constants import FN_ON_REQUEST
 from ops.api.serializers import VariantSerializer
@@ -38,8 +39,8 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
                 'pipe_diameter_size_manual': None,
                 'support_distance': None,
                 'support_distance_manual': None,
-                'mounting_group_a': None,
-                'mounting_group_b': None,
+                'mounting_group_bottom': None,
+                'mounting_group_top': None,
                 'material': None,
             },
             'pipe_clamp': {
@@ -298,19 +299,19 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
         support_distances = SupportDistance.objects.all()
         return support_distances
 
-    def get_available_mounting_groups_a(self):
+    def get_available_mounting_groups_bottom(self):
         """
-        Получает доступные группы креплений A на основе параметров.
+        Получает доступные группы креплений к трубе (нижнее) на основе параметров.
         """
         if not self.get_product_family():
-            self.debug.append('#Тип крепления A: Не выбран семейство изделии')
+            self.debug.append('#Тип крепления к трубе (нижнее): Не выбрано семейство изделия.')
             return PipeMountingGroup.objects.none()
 
         if not self.params['pipe_options']['shock_counts']:
-            self.debug.append('#Тип крепления A: Не выбран количество амортизаторов')
+            self.debug.append('#Тип крепления к трубе (нижнее): Не выбрано количество амортизаторов.')
 
         if not self.params['pipe_options']['location']:
-            self.debug.append('#Тип крепления A: Не выбран направление трубы')
+            self.debug.append('#Тип крепления к трубе (нижнее): Не выбрано направление трубы.')
             return PipeMountingGroup.objects.none()
 
         rules = PipeMountingRule.objects.filter(
@@ -325,39 +326,40 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
         elif location == 'vertical':
             rule = rules.filter(pipe_direction='z').first()
         else:
-            self.debug.append('#Тип крепления A: Неверное направление трубы.')
+            self.debug.append('#Тип крепления к трубе (нижнее): Неверное направление трубы.')
             return PipeMountingGroup.objects.none()
 
         if not rule:
-            self.debug.append('#Тип крепления A: Отсутствует "Правила выбора крепления".')
+            self.debug.append('#Тип крепления к трубе (нижнее): Отсутствуют «Правила выбора крепления».')
             return PipeMountingGroup.objects.none()
 
-        pipe_mounting_groups = rule.pipe_mounting_groups.all()
+        pipe_mounting_groups = rule.pipe_mounting_groups_bottom.all()
 
         return pipe_mounting_groups
 
-    def get_available_mounting_groups_b(self):
+    def get_available_mounting_groups_top(self):
         """
-        Получает доступные группы креплений B на основе параметров.
+        Получает доступные группы креплений к металлоконструкции (верхнее) на основе параметров.
         """
         if not self.get_product_family():
-            self.debug.append('#Тип крепления B: Не выбран семейство изделии')
+            self.debug.append('#Тип крепления к металлоконструкции (верхнее): Не выбрано семейство изделия.')
             return PipeMountingGroup.objects.none()
 
         family = self.get_product_family()
 
         if not family.is_upper_mount_selectable:
             self.debug.append(
-                '#Тип крепления B: Должен быть выбран "Доступен выбор верхнего крепления" в семейство изделии'
+                '#Тип крепления к металлоконструкции (верхнее): У семейства изделия должен быть установлен флаг '
+                '«Доступен выбор верхнего крепления».'
             )
             return PipeMountingGroup.objects.none()
 
         if not self.params['pipe_options']['shock_counts']:
-            self.debug.append('#Тип крепления B: Не выбран количество амортизаторов')
+            self.debug.append('#Тип крепления к металлоконструкции (верхнее): Не выбрано количество амортизаторов.')
             return PipeMountingGroup.objects.none()
 
         if not self.params['pipe_options']['location']:
-            self.debug.append('#Тип крепления B: Не выбран направление трубы')
+            self.debug.append('#Тип крепления к металлоконструкции (верхнее): Не выбрано направление трубы.')
             return PipeMountingGroup.objects.none()
 
         rules = PipeMountingRule.objects.filter(
@@ -373,12 +375,12 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
             rule = rules.filter(pipe_direction='z').first()
 
         if not rule:
-            self.debug.append('#Тип крепления B: Отсутствует "Правила выбора крепления".')
+            self.debug.append('#Тип крепления к металлоконструкции (верхнее): Отсутствуют «Правила выбора крепления».')
             return PipeMountingGroup.objects.none()
 
-        mounting_groups_b = rule.mounting_groups_b.all()
+        mounting_groups_top = rule.pipe_mounting_groups_top.all()
 
-        return mounting_groups_b
+        return mounting_groups_top
 
     def get_available_materials(self):
         materials = Material.objects.all()
@@ -705,6 +707,48 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
                 )
 
         self.debug.append('#Гидроамортизатор: Не найден подходящий гидроамортизатор.')
+        return None
+
+    def get_extender_item(self, variant: Variant, length: float) -> Optional[Item]:
+        """Возвращает первый Item удлинителя нужной длины для выбранного Variанта."""
+        group_type = getattr(ComponentGroupType, 'SHOCK_EXTENDERS', 'shock_extenders')
+        component_group = ComponentGroup.objects.filter(group_type=group_type).first()
+
+        if not component_group:
+            self.debug.append('#Удлинитель: Не найден ComponentGroup с типом SHOCK_EXTENDERS.')
+            return None
+
+        group_detail_types = list(component_group.detail_types.all())
+        base_detail_types = list(
+            BaseComposition.objects.filter(
+                base_parent_variant=variant,
+                base_child__in=group_detail_types,
+            ).values_list("base_child", flat=True)
+        )
+
+        if base_detail_types:
+            detail_types_to_check = base_detail_types
+        else:
+            self.debug.append(
+                "#Удлинитель: В базовом составе отсутствует нужный detail_type. Поиск по всей группе."
+            )
+            detail_types_to_check = group_detail_types
+
+        length_attrs = Attribute.objects.filter(
+            detail_type__in=detail_types_to_check,
+            usage=AttributeUsageChoices.LENGTH,
+        )
+
+        for attr in length_attrs:
+            item = Item.objects.filter(
+                variant__detail_type=attr.detail_type,
+                **{f"parameters__{attr.name}": str(length)},
+            ).first()
+            if item:
+                self.debug.append(f"#Удлинитель: Найден Item {item.id} длиной {length}.")
+                return item
+
+        self.debug.append(f'#Удлинитель: Не найден подходящий Item длиной {length}.')
         return None
 
     def is_clamp_a_required(self) -> bool:
@@ -1129,8 +1173,8 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
         available_shock_counts = self.get_available_shock_counts()
         available_pipe_diameters = self.get_available_pipe_diameters()
         available_support_distances = self.get_available_support_distances()
-        available_mounting_groups_a = self.get_available_mounting_groups_a()
-        available_mounting_groups_b = self.get_available_mounting_groups_b()
+        available_mounting_groups_bottom = self.get_available_mounting_groups_bottom()
+        available_mounting_groups_top = self.get_available_mounting_groups_top()
         available_materials = self.get_available_materials()
         available_pipe_clamps_a = self.get_available_pipe_clamps_a()
         available_pipe_clamps_b = self.get_available_pipe_clamps_b()
@@ -1150,8 +1194,8 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
             'pipe_params': {
                 'pipe_diameters': list(available_pipe_diameters.values_list('id', flat=True)),
                 'support_distances': list(available_support_distances.values_list('id', flat=True)),
-                'mounting_groups_a': list(available_mounting_groups_a.values_list('id', flat=True)),
-                'mounting_groups_b': list(available_mounting_groups_b.values_list('id', flat=True)),
+                'mounting_groups_bottom': list(available_mounting_groups_bottom.values_list('id', flat=True)),
+                'mounting_groups_top': list(available_mounting_groups_top.values_list('id', flat=True)),
                 'materials': list(available_materials.values_list('id', flat=True)),
             },
             'pipe_clamp': {
@@ -1245,6 +1289,15 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
             l_final=l_final,
 
         )
+        extender_item = None
+        if shock_result.get('type') == 2 and shock_result.get('extender', 0) > 0:
+            extender_item = self.get_extender_item(variant, shock_result['extender'])
+            if extender_item:
+                items_for_specification.append(extender_item)
+                shock_result['extender_item_id'] = extender_item.id
+                self.debug.append(
+                    f'#Удлинитель: Item {extender_item.id}.'
+                )
         self.debug.append(
             f'#Подбор исполнения изделия: Возвращаем блок тип {type_}. '
             f'Исполнение {variant} (id={variant.id}) подходит.'
@@ -1280,6 +1333,15 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
             mounting_length=None,
             type_=block_type
         )
+
+        if shock_result.get('type') == 2 and shock_result.get('extender', 0) > 0:
+            extender_item = self.get_extender_item(variant, shock_result['extender'])
+            if extender_item:
+                items_for_specification.append(extender_item)
+                shock_result['extender_item_id'] = extender_item.id
+                self.debug.append(
+                    f'#Удлинитель: Item {extender_item.id}.'
+                )
 
         self.debug.append(
             f'#Подбор исполнения изделия: Возвращаем стандартный блок. '

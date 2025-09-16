@@ -7,9 +7,18 @@ from django.db.models import Q, QuerySet, OuterRef, Exists, Count, Sum
 
 from catalog.choices import ComponentGroupType, Standard
 from catalog.models import (
-    ClampMaterialCoefficient, Material, ProductFamily, PipeMountingGroup, PipeMountingRule, PipeDiameter, LoadGroup,
+    ClampMaterialCoefficient,
+    Material,
+    PipeMountingGroup,
+    PipeMountingRule,
+    PipeDiameter,
+    LoadGroup,
     ComponentGroup,
-    SupportDistance, SpringBlockFamilyBinding, CoveringType, ClampSelectionMatrix, ClampSelectionEntry,
+    SupportDistance,
+    SpringBlockFamilyBinding,
+    CoveringType,
+    ClampSelectionMatrix,
+    ClampSelectionEntry,
 )
 
 from ops.api.serializers import VariantSerializer
@@ -19,9 +28,6 @@ from ops.loads.standard_series import MAX_SIZE as MAX_SIZE_STANDARD
 from ops.loads.l_series import MAX_SIZE as MAX_SIZE_L
 from ops.models import BaseComposition, Item, Variant, Attribute, ProjectItem
 from ops.services.base_selection import BaseSelectionAvailableOptions
-
-DEFAULT_MINIMUM_SPRING_TRAVEL = 5
-DEFAULT_BRANCH_QTY = 1
 
 
 class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
@@ -59,18 +65,19 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
                 'minimum_spring_travel': 5,
                 'selected_spring': None,
             },
-            'pipe_params': {
-                'temp1': None,
-                'temp2': None,
-                'nominal_diameter': None,
-                'outer_diameter_special': None,
-                'support_distance': None,
-                'support_distance_manual': None,
-                'insulation_thickness': None,
-                'outer_insulation_thickness': None,
-                'clamp_material': None,
-                'pipe_mounting_group': None,
-                'add_to_specification': True,
+            "pipe_params": {
+                "temp1": None,
+                "temp2": None,
+                "nominal_diameter": None,
+                "outer_diameter_special": None,
+                "support_distance": None,
+                "support_distance_manual": None,
+                "insulation_thickness": None,
+                "outer_insulation_thickness": None,
+                "clamp_material": None,
+                "pipe_mounting_group_bottom": None,
+                "pipe_mounting_group_top": None,
+                "add_to_specification": True,
             },
             "pipe_clamp": {
                 "pipe_mount_type": None,
@@ -172,33 +179,6 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
         temp2 = self.params['pipe_params']['temp2']
         return temp1, temp2
 
-    def get_selected_clamp_load(self) -> Optional[float]:
-        """Возвращает нагрузку выбранного амортизатора/распорки."""
-        selected_spring = self.get_selected_spring_block()
-        if not selected_spring:
-            return None
-
-        variant = selected_spring.get('variant')
-        parameters = selected_spring.get('parameters') or {}
-
-        item = selected_spring.get('item')
-        if isinstance(item, Item):
-            variant = item.variant
-            parameters = item.parameters or {}
-
-        if isinstance(variant, Variant):
-            attributes = variant.get_attributes()
-            load_attr = self.get_attribute_by_usage(attributes, AttributeUsageChoices.LOAD)
-            if load_attr:
-                value = parameters.get(load_attr.name)
-                if value is not None:
-                    try:
-                        return float(value)
-                    except (TypeError, ValueError):
-                        return None
-
-        return None
-
     def calculate_load(self) -> Dict[str, Any]:
         """
         Выполняет расчёт подходящих пружинных болков по введённой нагрузке и перемещениям.
@@ -274,37 +254,76 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
             'loads': loads,
         }
 
-    def get_pipe_mounting_groups(self) -> QuerySet:
+    def get_pipe_mounting_groups_bottom(self) -> QuerySet:
         """
-        Возвращает список (QuerySet) групп типов креплений к трубе, подходящих
-        под выбранное семейство изделия, направление трубы и количество пружинных блоков.
+        Возвращает список (QuerySet) групп креплений к трубе (нижнее),
+        подходящих под выбранное семейство изделия, направление трубы
+        и количество пружинных блоков.
 
-        Если условия не выполнены (семейство не выбрано или направление не X/Y),
+        Если условия не выполнены (семейство не выбрано или направление не X/Y/Z),
         возвращается пустой QuerySet.
         """
-        pipe_mounting_groups = PipeMountingGroup.objects.all()
+        product_family = self.get_product_family()
 
-        if not self.get_product_family() or self.params['pipe_options']['direction'] not in ['x', 'y', 'z']:
+        if not product_family or self.params["pipe_options"]["direction"] not in ["x", "y", "z"]:
             self.debug.append(
-                '#Тип крепления к трубе: Не выбран семейство изделии или направление трубы не "X" или "Y" или "Z".'
+                "#Тип крепления к трубе (нижнее): Не выбрано семейство изделия или направление трубы не \"X/Y/Z\"."
             )
             return PipeMountingGroup.objects.none()
 
         rule = PipeMountingRule.objects.filter(
-            family=self.get_product_family(),
-            num_spring_blocks=self.params['pipe_options']['branch_qty'],
-            pipe_direction=self.params['pipe_options']['direction'],
+            family=product_family,
+            num_spring_blocks=self.params["pipe_options"]["branch_qty"],
+            pipe_direction=self.params["pipe_options"]["direction"],
         ).first()
 
         if not rule:
-            self.debug.append('#Тип крепления к трубе: Отсутствует "Правило выбора крепления к трубы".')
+            self.debug.append("#Тип крепления к трубе (нижнее): Отсутствуют «Правила выбора крепления».")
             return PipeMountingGroup.objects.none()
 
-        pipe_mounting_groups = pipe_mounting_groups.filter(
-            id__in=rule.pipe_mounting_groups.values_list('id', flat=True)
-        )
+        return rule.pipe_mounting_groups_bottom.all()
 
-        return pipe_mounting_groups
+    def get_pipe_mounting_groups_top(self):
+        """
+        Возвращает список (QuerySet) групп креплений к металлоконструкции (верхнее),
+        подходящих под выбранное семейство изделия, направление трубы
+        и количество пружинных блоков.
+
+        Если условия не выполнены (семейство не выбрано, флаг выбора верхнего крепления не установлен
+        или направление не X/Y/Z), возвращается пустой QuerySet.
+        """
+        product_family = self.get_product_family()
+
+        if not product_family:
+            self.debug.append(f"#Тип крепления к металлоконструкции (верхнее): Не выбрано семейство изделия.")
+            return PipeMountingGroup.objects.none()
+
+        family = self.get_product_family()
+
+        if not family.is_upper_mount_selectable:
+            self.debug.append(
+                "#Тип крепления к металлоконструкции (верхнее): Для семейства изделия должен быть установлен флаг "
+                "«Доступен выбор верхнего крепления»."
+            )
+            return PipeMountingGroup.objects.none()
+
+        if self.params["pipe_options"]["direction"] not in ["x", "y", "z"]:
+            self.debug.append(
+                "#Тип крепления к металлоконструкции (верхнее): Направление трубы не \"X/Y/Z\"."
+            )
+            return PipeMountingGroup.objects.none()
+
+        rule = PipeMountingRule.objects.filter(
+            family=product_family,
+            num_spring_blocks=self.params["pipe_options"]["branch_qty"],
+            pipe_direction=self.params["pipe_options"]["direction"],
+        ).first()
+
+        if not rule:
+            self.debug.append("#Тип крепления к металлоконструкции (верхнее): Отсутствуют «Правила выбора крепления».")
+            return PipeMountingGroup.objects.none()
+
+        return rule.pipe_mounting_groups_top.all()
 
     def get_pipe_params(self) -> Dict[str, Any]:
         """
@@ -324,10 +343,12 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
         else:
             available_support_distances = []
 
-        pipe_mounting_groups = self.get_pipe_mounting_groups()
+        pipe_mounting_groups_bottom = self.get_pipe_mounting_groups_bottom()
+        pipe_mounting_groups_top = self.get_pipe_mounting_groups_top()
 
         return {
-            "pipe_mounting_groups": list(pipe_mounting_groups.values_list("id", flat=True)),
+            "pipe_mounting_groups_bottom": list(pipe_mounting_groups_bottom.values_list("id", flat=True)),
+            "pipe_mounting_groups_top": list(pipe_mounting_groups_top.values_list("id", flat=True)),
             "is_support_distance_available": is_support_distance_available,
             "support_distances": available_support_distances,
         }
@@ -572,20 +593,6 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
                 '#Выбор крепления к трубе: Не найден атрибут CoveringType. Не могу найти подходящие хомуты.'
             )
             return []
-
-        clamp_load_attribute = self.get_attribute_by_usage(attributes, AttributeUsageChoices.CLAMP_LOAD)
-        if not clamp_load_attribute:
-            self.debug.append(
-                '#Выбор крепления к трубе: Не найден атрибут ClampLoad. Не могу найти подходящие хомуты.'
-            )
-            return []
-
-        selected_clamp_load = self.get_selected_clamp_load()
-        if selected_clamp_load is None:
-            self.debug.append(
-                '#Выбор крепления к трубе: Не найдена нагрузка выбранного амортизатора/распорки. Не могу найти подходящие хомуты.'
-            )
-            return []
         
         # Инициализация нужных данных
         load_group_ids = self.get_load_group_ids_by_lgv()
@@ -637,7 +644,7 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
         self.debug.append(f'#Выбор крепления к трубе: Температура 1: {temp1}, Температура 2: {temp2}')
 
         # Введенная нагрузка
-        load = self.get_load_minus_z()
+        load = self.get_load_minus_z() / self.get_selected_branch_counts()
         self.debug.append(f'#Выбор крепления к трубе: Введенная нагрузка: {load}')
 
         # Группа материалов
@@ -714,7 +721,6 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
             'variant': variant,
             f'parameters__{material_attribute.name}': clamp_material.id,
             f'parameters__{pipe_diameter_attribute.name}': pipe_diameter.id,
-            f'parameters__{clamp_load_attribute.name}__gte': selected_clamp_load,
             f'parameters__{load_attribute.name}__gte': load_with_temp1_coefficient,
             f'parameters__{covering_type_attribute.name}__in': covering_type_ids,
         }
@@ -831,13 +837,19 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
         return list(set(found_item_ids))
 
-    def get_selected_pipe_mounting_group(self):
-        if not self.params['pipe_params']['pipe_mounting_group']:
-            self.debug.append('#Выбор крепления к трубе: Не выбран тип крепления к трубе.')
+    def get_selected_pipe_mounting_group_bottom(self):
+        if not self.params['pipe_params']['pipe_mounting_group_bottom']:
+            self.debug.append('#Выбор крепления к трубе (нижнее): Не выбран тип крепления.')
             return None
 
-        pipe_mounting_group = PipeMountingGroup.objects.get(id=self.params['pipe_params']['pipe_mounting_group'])
-        return pipe_mounting_group
+        return PipeMountingGroup.objects.get(id=self.params['pipe_params']['pipe_mounting_group_bottom'])
+
+    def get_selected_pipe_mounting_group_top(self):
+        if not self.params["pipe_params"]["pipe_mounting_group_top"]:
+            self.debug.append("#Выбор крепления к металлоконструкции (верхнее): Не выбран тип крепления.")
+            return None
+
+        return PipeMountingGroup.objects.get(id=self.params["pipe_params"]["pipe_mounting_group_top"])
 
     def get_available_pipe_clamp_variants(self, pipe_mounting_group):
         self.debug.append(f"#Выбор крепления к трубе: Показываю список исполнений вместо деталей.")
@@ -1001,7 +1013,14 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
             )
             return []
 
-        top_mounts = Item.objects.filter(type__product_family=family)
+        mounting_group_top = self.get_selected_pipe_mounting_group_top()
+
+        if not mounting_group_top:
+            self.debug.append("#Список креплений (верхнее): Не выбрана группа креплений. Поиск невозможен.")
+            return []
+
+        variants = mounting_group_top.variants.all()
+        top_mounts = Item.objects.filter(variant__in=variants)
 
         return list(top_mounts.values_list('id', flat=True))
 
@@ -1830,7 +1849,7 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
         available_directions = self.get_available_pipe_directions(selected_location)
         available_branch_counts = self.get_available_branch_counts(selected_location)
 
-        pipe_mounting_group = self.get_selected_pipe_mounting_group()
+        pipe_mounting_group = self.get_selected_pipe_mounting_group_bottom()
 
         if pipe_mounting_group and pipe_mounting_group.show_variants:
             available_pipe_clamps_type = "variant"

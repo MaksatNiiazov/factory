@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 from collections import defaultdict
 
 from ops.api.serializers import VariantSerializer
@@ -18,8 +18,6 @@ class WVDSelectionAvailableOptions(BaseSelectionAvailableOptions):
     def get_default_params(cls):
         """Вернуть возможные параметры для селектора."""
         return {
-            "product_class": None,  # класс изделия
-            "product_family": None,  # семейство изделия
             "load_and_move": {  # раздел Нагрузка и перемещение
                 "load_minus_x": None,  # нагрузка горизонтальная -
                 "load_minus_y": None,  # нагрузка вертикальная -
@@ -74,7 +72,7 @@ class WVDSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
     def initialize_selection_params(self) -> bool:
         self.debug.append('#Инициализация: начинаем проверку входных данных.')
-        product_family = self.params.get("product_family")
+        product_family = self.get_product_family()
         selected_assembly_unit = self.params.get("selected_assembly_unit")
 
         if not product_family:
@@ -114,12 +112,10 @@ class WVDSelectionAvailableOptions(BaseSelectionAvailableOptions):
         for index, variant in enumerate(variants):
             self.debug.append(f"[{index + 1}/{total_variants}] {variant} (id={variant.id})")
 
-            # ищем именно изделие, изделие именно из type исполнения
-            items = Item.objects.filter(variant_id=variant.id, type=variant.detail_type)
-
-            if not items:
-                self.debug.append(f"#Поиск DetailType: У текущего исполнения нет подходящих Items. Пропускаю.")
-                continue
+            # if selected_item.variant_id != variant.id:
+            #    self.debug.append(
+            #        f"#Поиск DetailType: У текущего исполнения нет подходящего выбранного блока. Пропускаю.")
+            #    continue
             # first_item = items.first()  # как правило он один всегда
             # items_for_specification.append(first_item)
             self.debug.append(f"Найдено подходящее исполнение. Поиск завершен.")
@@ -127,14 +123,6 @@ class WVDSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
         self.debug.append(f"#Поиск DetailType: Никаких исполнении не нашли. Завершаю поиск.")
         return None, None
-
-    def get_selected_product_family(self) -> Optional[ProductFamily]:
-        """Возвращает объект семейства изделий (ProductFamily) по выбранному идентификатору.
-        Если идентификатор не задан - возвращает None.
-        """
-        if not self.params["product_family"]:
-            return None
-        return ProductFamily.objects.get(id=self.params["product_family"])
 
     def get_selected_assembly_unit(self):
         """Возвращает объект СБЕ (Item) по выбранному идентификатору.
@@ -229,7 +217,7 @@ class WVDSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
     def get_available_assembly_units(self) -> list:
         """Возвращает список ID подходящих СБЕ (Item). Фильтрация выполняется по входящим параметрам load_and_move."""
-        product_family = self.get_selected_product_family()
+        product_family = self.get_product_family()
 
         all_items_assembly_unit = Item.objects.filter(
             type__product_family=product_family,  # выбранное семейство
@@ -242,3 +230,17 @@ class WVDSelectionAvailableOptions(BaseSelectionAvailableOptions):
             all_items_assembly_unit = self.calculate_load_and_move(all_items_assembly_unit)
 
         return all_items_assembly_unit or None
+
+    def get_parameters(self, available_options: Optional[Dict[str, Any]] = None) -> Tuple[Dict[str, Any], List[str]]:
+        """Возвращает параметры, необходимые для создания изделия демпфера."""
+        parameters = {}
+
+        # if not available_options:
+        #    available_options = self.get_available_options()
+
+        # параметры из выбранного СБЕ, которые возможно понадобятся для эскиза и тп
+        selected_assembly_unit = self.get_selected_assembly_unit()
+        if selected_assembly_unit and isinstance(selected_assembly_unit.parameters, dict):
+            parameters.update(selected_assembly_unit.parameters)
+
+        return parameters, []

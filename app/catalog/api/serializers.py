@@ -202,13 +202,13 @@ class PipeMountingRuleSerializer(CatalogueBaseSerializer):
             "family",
             "num_spring_blocks",
             "pipe_direction",
-            "pipe_mounting_groups",
-            "mounting_groups_b",
+            "pipe_mounting_groups_bottom",
+            "pipe_mounting_groups_top",
         )
         expandable_fields = {
             "family": ProductFamilySerializer,
-            "pipe_mounting_groups": (PipeMountingGroupSerializer, {"many": True}),
-            "mounting_groups_b": (PipeMountingGroupSerializer, {"many": True}),
+            "pipe_mounting_groups_bottom": (PipeMountingGroupSerializer, {"many": True}),
+            "pipe_mounting_groups_top": (PipeMountingGroupSerializer, {"many": True}),
         }
 
 

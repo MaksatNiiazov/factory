@@ -9,12 +9,14 @@ from ops.api.serializers import (
     SelectionParamsSerializer,
     SpacerSelectionParamsSerializer,
     ShockSelectionParamsSerializer,
+    WVDSelectionParamsSerializer,
 )
 
 SELECTION_SERIALIZERS = {
     "product_selection": SelectionParamsSerializer,
     "ssg_selection": SpacerSelectionParamsSerializer,
     "shock_selection": ShockSelectionParamsSerializer,
+    "wvd_selection": WVDSelectionParamsSerializer,
 }
 
 

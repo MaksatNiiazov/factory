@@ -394,7 +394,7 @@ class ProjectItemViewSet(CustomModelViewSet):
         serializer = serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        project_item.selection_params = serializer.validated_data
+        project_item.selection_params = serializer.data
         project_item.save()
 
         serializer = ProjectItemSerializer(project_item)
@@ -1432,7 +1432,7 @@ class ItemViewSet(CustomModelViewSet):
         serializer = TaskSerializer(task)
         data = serializer.data
 
-        process_import_task(task.id)
+        process_import_task.delay(task.id)
 
         return Response(data, status=status.HTTP_201_CREATED)
 
@@ -1630,7 +1630,7 @@ class AvailableMountsAPIView(APIView):
         if not rule:
             return Response([], status=200)
 
-        variant_ids = rule.pipe_mounting_groups.values_list('variants__id', flat=True)
+        variant_ids = rule.pipe_mounting_groups_bottom.values_list('variants__id', flat=True)
         variants = Variant.objects.filter(id__in=variant_ids).distinct()
 
         result = []

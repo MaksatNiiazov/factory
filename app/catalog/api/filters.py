@@ -26,7 +26,7 @@ LoadGroupFilter = create_filterset(LoadGroup, {
     'kn': lookups.INTEGER_LOOKUPS,
 })
 
-DEFAULT_INSULATED_TEMP = 1
+DEFAULT_INSULATED_TEMP = config.TEMPERATURE_WITH_INSULATION
 MaterialFilter = create_filterset(Material, {
     'name': lookups.STRING_LOOKUPS,
     'name_ru': lookups.STRING_LOOKUPS,
@@ -161,11 +161,11 @@ PipeMountingGroupFilter = create_filterset(PipeMountingGroup, {
 
 
 PipeMountingRuleFilter = create_filterset(PipeMountingRule, {
-    'family': lookups.FOREIGN_KEY_LOOKUPS,
-    'num_spring_blocks': lookups.INTEGER_LOOKUPS,
-    'pipe_direction': lookups.CHOICES_LOOKUPS,
-    'pipe_mounting_groups': lookups.ARRAY_LOOKUPS,
-    'mounting_groups_b': lookups.ARRAY_LOOKUPS,
+    "family": lookups.FOREIGN_KEY_LOOKUPS,
+    "num_spring_blocks": lookups.INTEGER_LOOKUPS,
+    "pipe_direction": lookups.CHOICES_LOOKUPS,
+    "pipe_mounting_groups_bottom": lookups.ARRAY_LOOKUPS,
+    "pipe_mounting_groups_top": lookups.ARRAY_LOOKUPS,
 })
 
 

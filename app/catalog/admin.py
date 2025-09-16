@@ -165,34 +165,39 @@ class PipeMountingGroupAdmin(admin.ModelAdmin):
 @admin.register(PipeMountingRule)
 class PipeMountingRuleAdmin(admin.ModelAdmin):
     list_display = (
-        'id', 'family', 'num_spring_blocks', 'pipe_direction', 'get_pipe_mounting_groups', 'get_mounting_groups_b',
+        "id",
+        "family",
+        "num_spring_blocks",
+        "pipe_direction",
+        "get_pipe_mounting_groups_bottom",
+        "get_pipe_mounting_groups_top",
     )
-    list_display_links = ('id',)
-    list_filter = ('family', 'num_spring_blocks', 'pipe_direction')
-    filter_horizontal = ('pipe_mounting_groups', 'mounting_groups_b')
-    autocomplete_fields = ('family',)
+    list_display_links = ("id",)
+    list_filter = ("family", "num_spring_blocks", "pipe_direction")
+    filter_horizontal = ("pipe_mounting_groups_bottom", "pipe_mounting_groups_top")
+    autocomplete_fields = ("family",)
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        return qs.prefetch_related('pipe_mounting_groups')
+        return qs.prefetch_related("pipe_mounting_groups_bottom", "pipe_mounting_groups_top")
 
-    @admin.display(description='Группы креплений к трубе')
-    def get_pipe_mounting_groups(self, obj):
-        groups = list(obj.pipe_mounting_groups.all()[:5])
+    @admin.display(description="Крепление к трубе (нижнее)")
+    def get_pipe_mounting_groups_bottom(self, obj):
+        groups = list(obj.pipe_mounting_groups_bottom.all()[:5])
         names = [group.name for group in groups]
 
-        if obj.pipe_mounting_groups.count() > 5:
-            return ', '.join(names) + ', ...'
-        return ', '.join(names)
+        if obj.pipe_mounting_groups_bottom.count() > 5:
+            return ", ".join(names) + ", ..."
+        return ", ".join(names)
 
-    @admin.display(description='Группы креплений B')
-    def get_mounting_groups_b(self, obj):
-        groups = list(obj.mounting_groups_b.all()[:5])
+    @admin.display(description="Крепление к металлоконструкции (верхнее)")
+    def get_pipe_mounting_groups_top(self, obj):
+        groups = list(obj.pipe_mounting_groups_top.all()[:5])
         names = [group.name for group in groups]
 
-        if obj.mounting_groups_b.count() > 5:
-            return ', '.join(names) + ', ...'
-        return ', '.join(names)
+        if obj.pipe_mounting_groups_top.count() > 5:
+            return ", ".join(names) + ", ..."
+        return ", ".join(names)
 
 
 @admin.register(ComponentGroup)

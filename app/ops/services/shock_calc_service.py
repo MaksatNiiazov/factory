@@ -73,7 +73,7 @@ def calculate_shock_block(data: dict, user):
             if not rule:
                 continue
 
-            variant_ids = rule.pipe_mounting_groups.values_list('variants__id', flat=True)
+            variant_ids = rule.pipe_mounting_groups_bottom.values_list('variants__id', flat=True)
             allowed = Variant.objects.filter(id__in=variant_ids).distinct()
             chosen = allowed.filter(id__in=mounting_vars)
             if chosen.count() != len(mounting_vars):

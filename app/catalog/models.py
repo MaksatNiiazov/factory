@@ -573,18 +573,18 @@ class PipeMountingGroup(CatalogMixin, SoftDeleteModelMixin, models.Model):
 
 class PipeMountingRule(CatalogMixin, SoftDeleteModelMixin, models.Model):
     family = models.ForeignKey(
-        ProductFamily, on_delete=models.PROTECT, related_name="+", verbose_name=_("Семейство изделия")
+        ProductFamily, on_delete=models.PROTECT, related_name="+", verbose_name=_("Семейство изделия"),
     )
     num_spring_blocks = models.PositiveSmallIntegerField(verbose_name=_("Количество пружинных блоков"))
     pipe_direction = models.CharField(
         max_length=PipeDirectionChoices.get_max_length(), choices=PipeDirectionChoices.choices,
-        verbose_name=_("Направление трубы")
+        verbose_name=_("Направление трубы"),
     )
-    pipe_mounting_groups = models.ManyToManyField(
-        PipeMountingGroup, blank=True, related_name="+", verbose_name=_("Группы креплений к трубе")
+    pipe_mounting_groups_bottom = models.ManyToManyField(
+        PipeMountingGroup, blank=True, related_name="+", verbose_name=_("Крепление к трубе (нижнее)"),
     )
-    mounting_groups_b = models.ManyToManyField(
-        PipeMountingGroup, blank=True, related_name="+", verbose_name=_("Группы крепления В")
+    pipe_mounting_groups_top = models.ManyToManyField(
+        PipeMountingGroup, blank=True, related_name="+", verbose_name=_("Крепление к металлоконструкции (верхнее)"),
     )
 
     class Meta:

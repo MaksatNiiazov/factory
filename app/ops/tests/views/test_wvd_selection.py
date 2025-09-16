@@ -4,6 +4,7 @@ from django.urls import reverse
 from rest_framework.test import APITestCase
 from rest_framework import status
 
+from catalog.choices import SelectionType
 from catalog.models import ProductClass, ProductFamily
 
 from ops import models as opsmodels
@@ -17,7 +18,11 @@ class WVDSelectionAPITest(APITestCase):
         self.user = User.objects.create_superuser(email="testuser@example.com", password="testpass")
 
         self.prod_class = ProductClass.objects.create(name="TestClass")
-        self.family = ProductFamily.objects.create(product_class=self.prod_class, name="WVD Family")
+        self.family = ProductFamily.objects.create(
+            product_class=self.prod_class,
+            name="WVD Family",
+            selection_type=SelectionType.WVD_SELECTION.value
+        )
 
         # DetailType
         # само изделие для исполнения
@@ -146,30 +151,30 @@ class WVDSelectionAPITest(APITestCase):
         )
         print("item4", self.item4.id)
         # изделие
-        self.item_main = opsmodels.Item.objects.create(
-            type=self.product_detail,
-            variant=self.variant,
-            author=self.user,
-            parameters={
-                "A": 342.0,
-                "B": 286.0,
-                "E": 333.0,
-                "d": 33.0,
-                "m": 113.0,
-                "s": 20.0,
-                "A1": 3.0,
-                "B1": 3.0,
-                "E1": 3.0,
-                "Fh": 45.0,
-                "Fv": 25.0,
-                "Sa": 9.0,
-                "Sh": 34.0,
-                "Sv": 40.0,
-                "d1": 2.0,
-                "s1": 1.0
-            }
-        )
-        print("item_main", self.item_main.id)
+        # self.item_main = opsmodels.Item.objects.create(
+        #    type=self.product_detail,
+        #    variant=self.variant,
+        #    author=self.user,
+        #    parameters={
+        #        "A": 342.0,
+        #        "B": 286.0,
+        #        "E": 333.0,
+        #        "d": 33.0,
+        #        "m": 113.0,
+        #        "s": 20.0,
+        #        "A1": 3.0,
+        #        "B1": 3.0,
+        #        "E1": 3.0,
+        #        "Fh": 45.0,
+        #        "Fv": 25.0,
+        #        "Sa": 9.0,
+        #        "Sh": 34.0,
+        #        "Sv": 40.0,
+        #        "d1": 2.0,
+        #        "s1": 1.0
+        #    }
+        #)
+        # print("item_main", self.item_main.id)
 
         # делаем базовый состав
         self.base_composition = opsmodels.BaseComposition.objects.create(
@@ -196,21 +201,20 @@ class WVDSelectionAPITest(APITestCase):
         self.token = response.data["token"]
         self.client.credentials(HTTP_AUTHORIZATION="Bearer " + self.token)
 
-        get_params_url = reverse("project_item-selection-params", args=[self.project.id, self.project_item_1.id])
-        self.get_params_url = get_params_url + "?selection_type=wvd_selection"
-
-        set_url = reverse("project_item-set-selection", args=[self.project.id, self.project_item_1.id])
-        self.set_url = set_url + "?selection_type=wvd_selection"
-
-        get_url = reverse("project_item-get-selection-options", args=[self.project.id, self.project_item_1.id])
-        self.get_url = get_url + "?selection_type=wvd_selection"
+        self.set_product_family = reverse(
+            "project_item-set-product-family", args=[self.project.id, self.project_item_1.id])
+        self.get_params_url = reverse(
+            "project_item-selection-params", args=[self.project.id, self.project_item_1.id])
+        self.set_url = reverse("project_item-set-selection", args=[self.project.id, self.project_item_1.id])
+        self.get_url = reverse("project_item-get-selection-options", args=[self.project.id, self.project_item_1.id])
+        self.update_url = reverse("project_item-update-item", args=[self.project.id, self.project_item_1.id])
 
     def test_selection(self):
+        self.client.post(self.set_product_family, data={"product_family": self.family.id})
+
         response = self.client.post(
             self.set_url,
             data={
-                "product_class": self.prod_class.id,
-                "product_family": self.family.id,
                 "load_and_move": {},
                 "variant": None,
                 "selected_assembly_unit": None,
@@ -219,8 +223,6 @@ class WVDSelectionAPITest(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["id"], self.project_item_1.id)
-        self.assertEqual(response.data["selection_params"]["product_class"], self.prod_class.id)
-        self.assertEqual(response.data["selection_params"]["product_family"], self.family.id)
 
         print(">> .../set_selection/")
 
@@ -242,8 +244,6 @@ class WVDSelectionAPITest(APITestCase):
         response = self.client.post(
             self.set_url,
             data={
-                "product_class": self.prod_class.id,
-                "product_family": self.family.id,
                 "load_and_move": {"load_plus_x": 250, "move_minus_d": 12},
                 "variant": None,
                 "selected_assembly_unit": None,
@@ -252,8 +252,6 @@ class WVDSelectionAPITest(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["id"], self.project_item_1.id)
-        self.assertEqual(response.data["selection_params"]["product_class"], self.prod_class.id)
-        self.assertEqual(response.data["selection_params"]["product_family"], self.family.id)
 
         response = self.client.post(self.get_url, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -269,8 +267,6 @@ class WVDSelectionAPITest(APITestCase):
         response = self.client.post(
             self.set_url,
             data={
-                "product_class": self.prod_class.id,
-                "product_family": self.family.id,
                 "load_and_move": {"load_plus_x": 250, "move_minus_d": 12},
                 "variant": None,
                 "selected_assembly_unit": self.item4.id,
@@ -285,8 +281,6 @@ class WVDSelectionAPITest(APITestCase):
         response = self.client.post(
             self.set_url,
             data={
-                "product_class": self.prod_class.id,
-                "product_family": self.family.id,
                 "load_and_move": {"load_plus_x": 250, "move_minus_d": 12},
                 "variant": None,
                 "selected_assembly_unit": self.item1.id,
@@ -299,18 +293,20 @@ class WVDSelectionAPITest(APITestCase):
         self.assertEqual(response.data["suitable_variant"]["id"], self.variant.id)
         print(response.data["specification"])
 
-    def tearDown(self):
-        self.family.hard_delete()
-        self.prod_class.hard_delete()
-        self.item1.hard_delete()
-        self.item2.hard_delete()
-        self.item3.hard_delete()
-        self.item4.hard_delete()
-        self.item_main.hard_delete()
-        self.base_composition.hard_delete()
-        self.variant.hard_delete()
-        self.detail.hard_delete()
-        self.product_detail.hard_delete()
-        self.project_item_1.hard_delete()
-        self.project.hard_delete()
-        self.user.delete()
+        # выбираем исполнение
+        response = self.client.post(
+            self.set_url,
+            data={
+                "load_and_move": {"load_plus_x": 250, "move_minus_d": 12},
+                "variant": self.variant.id,
+                "selected_assembly_unit": self.item1.id,
+            },
+            format="json"
+        )
+
+        # создаем изделие
+        print(">> .../update_item/")
+        response = self.client.post(self.update_url, format="json")
+        print(response.data)
+        self.original_item = opsmodels.Item.objects.get(id=response.data["original_item"])
+        self.assertTrue(self.original_item.parameters == self.item1.parameters)

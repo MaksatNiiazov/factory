@@ -39,8 +39,8 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
                 "pipe_diameter_size_manual": None,
                 "support_distance": None,
                 "support_distance_manual": None,
-                "mounting_group_a": None,
-                "mounting_group_b": None,
+                "mounting_group_bottom": None,
+                "mounting_group_top": None,
                 "material": None,
             },
             "pipe_clamp": {
@@ -199,21 +199,21 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
             return None
         return block.fn
 
-    def get_mounting_group_a(self) -> Optional[PipeMountingGroup]:
-        group_id = self.params.get("pipe_params", {}).get("mounting_group_a")
+    def get_mounting_group_bottom(self) -> Optional[PipeMountingGroup]:
+        group_id = self.params.get("pipe_params", {}).get("mounting_group_bottom")
         if group_id:
             return PipeMountingGroup.objects.filter(id=group_id).first()
         return None
 
-    def get_mounting_group_b(self) -> Optional[PipeMountingGroup]:
-        group_id = self.params.get("pipe_params", {}).get("mounting_group_b")
+    def get_mounting_group_top(self) -> Optional[PipeMountingGroup]:
+        group_id = self.params.get("pipe_params", {}).get("mounting_group_top")
         if group_id:
             return PipeMountingGroup.objects.filter(id=group_id).first()
         return None
 
-    def get_available_pipe_clamps_a(self) -> List[int]:
+    def get_available_pipe_clamps_bottom(self) -> List[int]:
         result = []
-        group = self.get_mounting_group_a()
+        group = self.get_mounting_group_bottom()
         if not group:
             self.debug.append("Не выбрана группа креплений A")
             return result
@@ -273,9 +273,9 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
             result.extend(items)
         return list(result)
 
-    def get_available_pipe_clamps_b(self) -> List[int]:
+    def get_available_pipe_clamps_top(self) -> List[int]:
         result = []
-        group = self.get_mounting_group_b()
+        group = self.get_mounting_group_top()
         if not group:
             self.debug.append("Не выбрана группа креплений B")
             return result
@@ -323,13 +323,13 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
             result.extend(items)
         return list(result)
 
-    def get_pipe_clamp_a(self) -> Optional[Item]:
-        pipe_clamp_a_id = self.params.get("pipe_clamp", {}).get("pipe_clamp_a")
+    def get_pipe_clamp_bottom(self) -> Optional[Item]:
+        pipe_clamp_a_id = self.params.get("pipe_clamp", {}).get("pipe_clamp_bottom")
         if pipe_clamp_a_id:
             return Item.objects.filter(pk=pipe_clamp_a_id).first()
 
-    def get_pipe_clamp_b(self) -> Optional[Item]:
-        pipe_clamp_b_id = self.params.get("pipe_clamp", {}).get("pipe_clamp_b")
+    def get_pipe_clamp_top(self) -> Optional[Item]:
+        pipe_clamp_b_id = self.params.get("pipe_clamp", {}).get("pipe_clamp_top")
         if pipe_clamp_b_id:
             return Item.objects.filter(pk=pipe_clamp_b_id).first()
 
@@ -337,13 +337,13 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
         """
         Проверяет, требуется ли крепление A на основе наличия исполнений в группе креплений A.
         """
-        mounting_group_a = self.get_mounting_group_a()
+        mounting_group_bottom = self.get_mounting_group_bottom()
 
-        if not mounting_group_a:
+        if not mounting_group_bottom:
             # TODO: Подумать над тем, что делать если группа креплений A не выбрана
             return True
 
-        if mounting_group_a.variants.exists():
+        if mounting_group_bottom.variants.exists():
             return True
         else:
             self.debug.append('Крепление A не требуется, так как группа креплений A не содержит исполнений.')
@@ -353,13 +353,13 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
         """
         Проверяет, требуется ли крепление B на основе наличия исполнений в группе креплений B.
         """
-        mounting_group_b = self.get_mounting_group_b()
+        mounting_group_top = self.get_mounting_group_top()
 
-        if not mounting_group_b:
+        if not mounting_group_top:
             # TODO: Подумать над тем, что делать если группа креплений B не выбрана
             return True
 
-        if mounting_group_b.variants.exists():
+        if mounting_group_top.variants.exists():
             return True
         else:
             self.debug.append('Крепление B не требуется, так как группа креплений B не содержит исполнений.')
@@ -373,14 +373,14 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
         base_items = []
 
         if self.is_clamp_a_required():
-            clamp_a = self.get_pipe_clamp_a()
+            clamp_a = self.get_pipe_clamp_bottom()
             if clamp_a:
                 base_items.append(clamp_a)
             else:
                 self.debug.append('Крепление A требуется, но не найдено.')
 
         if self.is_clamp_b_required():
-            clamp_b = self.get_pipe_clamp_b()
+            clamp_b = self.get_pipe_clamp_top()
             if clamp_b:
                 base_items.append(clamp_b)
             else:
@@ -571,7 +571,7 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
             self.debug.append('#Тип крепления A: Отсутствует "Правила выбора крепления".')
             return PipeMountingGroup.objects.none()
 
-        pipe_mounting_groups = rule.pipe_mounting_groups.all()
+        pipe_mounting_groups = rule.pipe_mounting_groups_bottom.all()
 
         return pipe_mounting_groups
 
