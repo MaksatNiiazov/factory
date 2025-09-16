@@ -179,8 +179,8 @@ class CalculateShockTestCase(TestCase):
         self.rule = PipeMountingRule.objects.create(
             family=self.family, num_spring_blocks=2, pipe_direction="x"
         )
-        self.rule.pipe_mounting_groups.add(self.mounting_group)
-        self.rule.mounting_groups_b.add(self.mounting_group_2)
+        self.rule.pipe_mounting_groups_bottom.add(self.mounting_group)
+        self.rule.pipe_mounting_groups_top.add(self.mounting_group_2)
 
         # Диаметры
         self.nominal_diameter = NominalDiameter.objects.create(dn=199)
@@ -250,8 +250,8 @@ class CalculateShockTestCase(TestCase):
                     "pipe_diameter_size_manual": None,
                     "support_distance": self.support_distance.id,
                     "support_distance_manual": None,
-                    "mounting_group_a": self.mounting_group.id,
-                    "mounting_group_b": self.mounting_group_2.id,
+                    "mounting_group_bottom": self.mounting_group.id,
+                    "mounting_group_top": self.mounting_group_2.id,
                     "material": self.material.id,
                 },
                 "pipe_clamp": {
@@ -361,143 +361,143 @@ class CalculateShockTestCase(TestCase):
             msg="Нагрузка должна быть возвращена без изменений при некорректном типе нагрузки",
         )
 
-    def test_get_available_mounting_groups_a_with_valid_data(self):
+    def test_get_available_mounting_groups_bottom_with_valid_data(self):
         """
-        Проверяет, что get_available_mounting_groups_a возвращает корректные группы креплений A.
+        Проверяет, что get_available_mounting_groups_bottom возвращает корректные группы креплений.
         """
         selector = ShockSelectionAvailableOptions(self.project_item)
-        groups = selector.get_available_mounting_groups_a()
+        groups = selector.get_available_mounting_groups_bottom()
 
-        self.assertTrue(groups.exists(), msg="Список групп креплений A пуст")
+        self.assertTrue(groups.exists(), msg="Список нижних групп креплений пуст")
         self.assertIn(self.mounting_group.id, groups.values_list("id", flat=True))
 
-    def test_get_available_mounting_groups_a_without_product_family(self):
+    def test_get_available_mounting_groups_bottom_without_product_family(self):
         """
-        Проверяет, что get_available_mounting_groups_a возвращает пустой QuerySet,
+        Проверяет, что get_available_mounting_groups_bottom возвращает пустой QuerySet,
         если семейство изделия не выбрано.
         """
         self.project_item.selection_params["product_family"] = None
         selector = ShockSelectionAvailableOptions(self.project_item)
-        groups = selector.get_available_mounting_groups_a()
+        groups = selector.get_available_mounting_groups_bottom()
 
-        self.assertFalse(groups.exists(), msg="Список групп креплений A должен быть пуст")
+        self.assertFalse(groups.exists(), msg="Список нижних групп креплений должен быть пуст")
         self.assertIn(
-            "#Тип крепления A: Не выбран семейство изделии", selector.debug
+            "#Тип нижнего крепления: Не выбрано семейство изделий", selector.debug
         )
 
-    def test_get_available_mounting_groups_a_without_shock_counts(self):
+    def test_get_available_mounting_groups_bottom_without_shock_counts(self):
         """
-        Проверяет, что get_available_mounting_groups_a добавляет сообщение в debug,
+        Проверяет, что get_available_mounting_groups_bottom добавляет сообщение в debug,
         если количество амортизаторов не выбрано.
         """
         self.project_item.selection_params["pipe_options"]["shock_counts"] = None
         selector = ShockSelectionAvailableOptions(self.project_item)
-        groups = selector.get_available_mounting_groups_a()
+        groups = selector.get_available_mounting_groups_bottom()
 
-        self.assertFalse(groups.exists(), msg="Список групп креплений A должен быть пуст")
+        self.assertFalse(groups.exists(), msg="Список нижних групп креплений должен быть пуст")
         self.assertIn(
-            "#Тип крепления A: Не выбран количество амортизаторов", selector.debug
+            "#Тип нижнего крепления: Не выбрано количество амортизаторов", selector.debug
         )
 
-    def test_get_available_mounting_groups_a_without_pipe_direction(self):
+    def test_get_available_mounting_groups_bottom_without_pipe_direction(self):
         """
-        Проверяет, что get_available_mounting_groups_a возвращает пустой QuerySet,
+        Проверяет, что get_available_mounting_groups_bottom возвращает пустой QuerySet,
         если направление трубы не выбрано.
         """
         self.project_item.selection_params["pipe_options"]["location"] = None
         selector = ShockSelectionAvailableOptions(self.project_item)
-        groups = selector.get_available_mounting_groups_a()
+        groups = selector.get_available_mounting_groups_bottom()
 
-        self.assertFalse(groups.exists(), msg="Список групп креплений A должен быть пуст")
+        self.assertFalse(groups.exists(), msg="Список нижних групп креплений должен быть пуст")
         self.assertIn(
-            "#Тип крепления A: Не выбран направление трубы", selector.debug
+            "#Тип нижнего крепления: Не выбрано направление трубы", selector.debug
         )
 
-    def test_get_available_mounting_groups_a_without_rules(self):
+    def test_get_available_mounting_groups_bottom_without_rules(self):
         """
-        Проверяет, что get_available_mounting_groups_a возвращает пустой QuerySet,
+        Проверяет, что get_available_mounting_groups_bottom возвращает пустой QuerySet,
         если правила выбора креплений отсутствуют.
         """
         self.project_item.selection_params["pipe_options"]["shock_counts"] = 99  # Некорректное значение
         selector = ShockSelectionAvailableOptions(self.project_item)
-        groups = selector.get_available_mounting_groups_a()
+        groups = selector.get_available_mounting_groups_bottom()
 
-        self.assertFalse(groups.exists(), msg="Список групп креплений A должен быть пуст")
+        self.assertFalse(groups.exists(), msg="Список нижних групп креплений должен быть пуст")
         self.assertIn(
-            "#Тип крепления A: Отсутствует \"Правила выбора крепления\".", selector.debug
+            "#Тип нижнего крепления: Отсутствует \"Правила выбора крепления\".", selector.debug
         )
 
-    def test_get_available_mounting_groups_b_without_product_family(self):
+    def test_get_available_mounting_groups_top_without_product_family(self):
         """
-        Проверяет, что get_available_mounting_groups_b возвращает пустой QuerySet,
+        Проверяет, что get_available_mounting_groups_top возвращает пустой QuerySet,
         если семейство изделия не выбрано.
         """
         self.project_item.selection_params["product_family"] = None
         selector = ShockSelectionAvailableOptions(self.project_item)
-        groups = selector.get_available_mounting_groups_b()
+        groups = selector.get_available_mounting_groups_top()
 
-        self.assertFalse(groups.exists(), msg="Список групп креплений B должен быть пуст")
+        self.assertFalse(groups.exists(), msg="Список верхних групп креплений должен быть пуст")
         self.assertIn(
-            "#Тип крепления B: Не выбран семейство изделии", selector.debug
+            "#Тип верхнего крепления: Не выбрано семейство изделий", selector.debug
         )
 
-    def test_get_available_mounting_groups_b_without_upper_mount_selectable(self):
+    def test_get_available_mounting_groups_top_without_upper_mount_selectable(self):
         """
-        Проверяет, что get_available_mounting_groups_b возвращает пустой QuerySet,
+        Проверяет, что get_available_mounting_groups_top возвращает пустой QuerySet,
         если семейство изделия не поддерживает верхнее крепление.
         """
         self.family.is_upper_mount_selectable = False
         self.family.save()
 
         selector = ShockSelectionAvailableOptions(self.project_item)
-        groups = selector.get_available_mounting_groups_b()
+        groups = selector.get_available_mounting_groups_top()
 
-        self.assertFalse(groups.exists(), msg="Список групп креплений B должен быть пуст")
+        self.assertFalse(groups.exists(), msg="Список верхних групп креплений должен быть пуст")
         self.assertIn(
-            "#Тип крепления B: Должен быть выбран \"Доступен выбор верхнего крепления\" в семейство изделии",
+            "#Тип верхнего крепления: Должен быть выбран \"Доступен выбор верхнего крепления\" в семействе изделий",
             selector.debug,
         )
 
-    def test_get_available_mounting_groups_b_without_shock_counts(self):
+    def test_get_available_mounting_groups_top_without_shock_counts(self):
         """
-        Проверяет, что get_available_mounting_groups_b добавляет сообщение в debug,
+        Проверяет, что get_available_mounting_groups_top добавляет сообщение в debug,
         если количество амортизаторов не выбрано.
         """
         self.project_item.selection_params["pipe_options"]["shock_counts"] = None
         selector = ShockSelectionAvailableOptions(self.project_item)
-        groups = selector.get_available_mounting_groups_b()
+        groups = selector.get_available_mounting_groups_top()
 
-        self.assertFalse(groups.exists(), msg="Список групп креплений B должен быть пуст")
+        self.assertFalse(groups.exists(), msg="Список верхних групп креплений должен быть пуст")
         self.assertIn(
-            "#Тип крепления B: Не выбран количество амортизаторов", selector.debug
+            "#Тип верхнего крепления: Не выбрано количество амортизаторов", selector.debug
         )
 
-    def test_get_available_mounting_groups_b_without_pipe_location(self):
+    def test_get_available_mounting_groups_top_without_pipe_location(self):
         """
-        Проверяет, что get_available_mounting_groups_b возвращает пустой QuerySet,
+        Проверяет, что get_available_mounting_groups_top возвращает пустой QuerySet,
         если направление трубы не выбрано.
         """
         self.project_item.selection_params["pipe_options"]["location"] = None
         selector = ShockSelectionAvailableOptions(self.project_item)
-        groups = selector.get_available_mounting_groups_b()
+        groups = selector.get_available_mounting_groups_top()
 
-        self.assertFalse(groups.exists(), msg="Список групп креплений B должен быть пуст")
+        self.assertFalse(groups.exists(), msg="Список верхних групп креплений должен быть пуст")
         self.assertIn(
-            "#Тип крепления B: Не выбран направление трубы", selector.debug
+            "#Тип верхнего крепления: Не выбрано направление трубы", selector.debug
         )
 
-    def test_get_available_mounting_groups_b_without_rules(self):
+    def test_get_available_mounting_groups_top_without_rules(self):
         """
-        Проверяет, что get_available_mounting_groups_b возвращает пустой QuerySet,
+        Проверяет, что get_available_mounting_groups_top возвращает пустой QuerySet,
         если правила выбора креплений отсутствуют.
         """
         self.project_item.selection_params["pipe_options"]["shock_counts"] = 99  # Некорректное значение
         selector = ShockSelectionAvailableOptions(self.project_item)
-        groups = selector.get_available_mounting_groups_b()
+        groups = selector.get_available_mounting_groups_top()
 
-        self.assertFalse(groups.exists(), msg="Список групп креплений B должен быть пуст")
+        self.assertFalse(groups.exists(), msg="Список верхних групп креплений должен быть пуст")
         self.assertIn(
-            "#Тип крепления B: Отсутствует \"Правила выбора крепления\".", selector.debug
+            "#Тип верхнего крепления: Отсутствует \"Правила выбора крепления\".", selector.debug
         )
 
     def test_get_available_options_with_valid_data(self):
@@ -520,8 +520,8 @@ class CalculateShockTestCase(TestCase):
         self.assertIn("shock_counts", options["pipe_options"], msg="Отсутствует ключ 'shock_counts' в 'pipe_options'.")
         self.assertIn("pipe_diameters", options["pipe_params"], msg="Отсутствует ключ 'pipe_diameters' в 'pipe_params'.")
         self.assertIn("support_distances", options["pipe_params"], msg="Отсутствует ключ 'support_distances' в 'pipe_params'.")
-        self.assertIn("mounting_groups_a", options["pipe_params"], msg="Отсутствует ключ 'mounting_groups_a' в 'pipe_params'.")
-        self.assertIn("mounting_groups_b", options["pipe_params"], msg="Отсутствует ключ 'mounting_groups_b' в 'pipe_params'.")
+        self.assertIn("mounting_groups_bottom", options["pipe_params"], msg="Отсутствует ключ 'mounting_groups_bottom' в 'pipe_params'.")
+        self.assertIn("mounting_groups_top", options["pipe_params"], msg="Отсутствует ключ 'mounting_groups_top' в 'pipe_params'.")
         self.assertIn("materials", options["pipe_params"], msg="Отсутствует ключ 'materials' в 'pipe_params'.")
         self.assertIn("pipe_clamps_a", options["pipe_clamp"], msg="Отсутствует ключ 'pipe_clamps_a' в 'pipe_clamp'.")
         self.assertIn("pipe_clamps_b", options["pipe_clamp"], msg="Отсутствует ключ 'pipe_clamps_b' в 'pipe_clamp'.")
@@ -537,12 +537,12 @@ class CalculateShockTestCase(TestCase):
         selector = ShockSelectionAvailableOptions(self.project_item)
         options = selector.get_available_options()
 
-        self.assertFalse(options["pipe_params"]["mounting_groups_a"], msg="Список 'mounting_groups_a' должен быть пуст.")
-        self.assertFalse(options["pipe_params"]["mounting_groups_b"], msg="Список 'mounting_groups_b' должен быть пуст.")
+        self.assertFalse(options["pipe_params"]["mounting_groups_bottom"], msg="Список 'mounting_groups_bottom' должен быть пуст.")
+        self.assertFalse(options["pipe_params"]["mounting_groups_top"], msg="Список 'mounting_groups_top' должен быть пуст.")
         self.assertFalse(options["pipe_clamp"]["pipe_clamps_a"], msg="Список 'pipe_clamps_a' должен быть пуст.")
         self.assertFalse(options["pipe_clamp"]["pipe_clamps_b"], msg="Список 'pipe_clamps_b' должен быть пуст.")
-        self.assertIn("#Тип крепления A: Не выбран семейство изделии", selector.debug, msg="Отсутствует сообщение в debug.")
-        self.assertIn("#Тип крепления B: Не выбран семейство изделии", selector.debug, msg="Отсутствует сообщение в debug.")
+        self.assertIn("#Тип нижнего крепления: Не выбрано семейство изделий", selector.debug, msg="Отсутствует сообщение в debug.")
+        self.assertIn("#Тип верхнего крепления: Не выбрано семейство изделий", selector.debug, msg="Отсутствует сообщение в debug.")
 
     def test_get_load_with_multiple_shock_counts(self):
         """
@@ -669,75 +669,75 @@ class CalculateShockTestCase(TestCase):
         self.assertIsNone(variant, msg="Вариант изделия должен быть None при отсутствии подходящих кандидатов.")
         self.assertIn("Не найдено подходящих исполнений для всех вариантов нагрузки.", selector.debug)
 
-    def test_get_available_mounting_groups_a_with_horizontal_pipe_direction(self):
+    def test_get_available_mounting_groups_bottom_with_horizontal_pipe_direction(self):
         """
-        Проверяет, что get_available_mounting_groups_a возвращает корректные группы креплений A
+        Проверяет, что get_available_mounting_groups_bottom возвращает корректные группы креплений
         при горизонтальном направлении трубы.
         """
         self.project_item.selection_params["pipe_options"]["direction"] = "x"
         self.project_item.selection_params["pipe_options"]["location"] = "horizontal"
         selector = ShockSelectionAvailableOptions(self.project_item)
-        groups = selector.get_available_mounting_groups_a()
+        groups = selector.get_available_mounting_groups_bottom()
 
-        self.assertTrue(groups.exists(), msg="Список групп креплений A пуст")
+        self.assertTrue(groups.exists(), msg="Список нижних групп креплений пуст")
         self.assertIn(self.mounting_group.id, groups.values_list("id", flat=True))
 
-    def test_get_available_mounting_groups_a_with_vertical_pipe_direction(self):
+    def test_get_available_mounting_groups_bottom_with_vertical_pipe_direction(self):
         """
-        Проверяет, что get_available_mounting_groups_a возвращает корректные группы креплений A
+        Проверяет, что get_available_mounting_groups_bottom возвращает корректные группы креплений
         при вертикальном направлении трубы.
         """
         rule = PipeMountingRule.objects.create(
             family=self.family, num_spring_blocks=2, pipe_direction="z"
         )
-        rule.pipe_mounting_groups.add(self.mounting_group)
-        self.rule.pipe_mounting_groups.add(self.mounting_group)
-        self.rule.mounting_groups_b.add(self.mounting_group_2)
+        rule.pipe_mounting_groups_bottom.add(self.mounting_group)
+        self.rule.pipe_mounting_groups_bottom.add(self.mounting_group)
+        self.rule.pipe_mounting_groups_top.add(self.mounting_group_2)
         self.project_item.selection_params["pipe_options"]["location"] = "vertical"
         selector = ShockSelectionAvailableOptions(self.project_item)
-        groups = selector.get_available_mounting_groups_a()
+        groups = selector.get_available_mounting_groups_bottom()
 
-        self.assertTrue(groups.exists(), msg="Список групп креплений A пуст")
+        self.assertTrue(groups.exists(), msg="Список нижних групп креплений пуст")
         self.assertIn(self.mounting_group.id, groups.values_list("id", flat=True))
 
-    def test_get_available_mounting_groups_a_with_invalid_pipe_location(self):
+    def test_get_available_mounting_groups_bottom_with_invalid_pipe_location(self):
         """
-        Проверяет, что get_available_mounting_groups_a возвращает пустой QuerySet,
+        Проверяет, что get_available_mounting_groups_bottom возвращает пустой QuerySet,
         если направление трубы некорректно.
         """
         self.project_item.selection_params["pipe_options"]["location"] = "invalid_direction"
         selector = ShockSelectionAvailableOptions(self.project_item)
-        groups = selector.get_available_mounting_groups_a()
+        groups = selector.get_available_mounting_groups_bottom()
 
-        self.assertFalse(groups.exists(), msg="Список групп креплений A должен быть пуст")
+        self.assertFalse(groups.exists(), msg="Список нижних групп креплений должен быть пуст")
         self.assertIn(
-            "#Тип крепления A: Неверное направление трубы.", selector.debug
+            "#Тип нижнего крепления: Неверное направление трубы.", selector.debug
         )
 
-    def test_get_available_mounting_groups_a_with_missing_pipe_location(self):
+    def test_get_available_mounting_groups_bottom_with_missing_pipe_location(self):
         """
-        Проверяет, что get_available_mounting_groups_a возвращает пустой QuerySet,
+        Проверяет, что get_available_mounting_groups_bottom возвращает пустой QuerySet,
         если расположение трубы не указано.
         """
         self.project_item.selection_params["pipe_options"]["location"] = None
         selector = ShockSelectionAvailableOptions(self.project_item)
-        groups = selector.get_available_mounting_groups_a()
+        groups = selector.get_available_mounting_groups_bottom()
 
-        self.assertFalse(groups.exists(), msg="Список групп креплений A должен быть пуст")
+        self.assertFalse(groups.exists(), msg="Список нижних групп креплений должен быть пуст")
         self.assertIn(
-            "#Тип крепления A: Не выбран направление трубы", selector.debug
+            "#Тип нижнего крепления: Не выбрано направление трубы", selector.debug
         )
 
-    def test_get_available_mounting_groups_a_with_no_matching_rules(self):
+    def test_get_available_mounting_groups_bottom_with_no_matching_rules(self):
         """
-        Проверяет, что get_available_mounting_groups_a возвращает пустой QuerySet,
+        Проверяет, что get_available_mounting_groups_bottom возвращает пустой QuerySet,
         если правила выбора креплений отсутствуют.
         """
         self.project_item.selection_params["pipe_options"]["shock_counts"] = 99  # Некорректное значение
         selector = ShockSelectionAvailableOptions(self.project_item)
-        groups = selector.get_available_mounting_groups_a()
+        groups = selector.get_available_mounting_groups_bottom()
 
-        self.assertFalse(groups.exists(), msg="Список групп креплений A должен быть пуст")
+        self.assertFalse(groups.exists(), msg="Список нижних групп креплений должен быть пуст")
         self.assertIn(
-            "#Тип крепления A: Отсутствует \"Правила выбора крепления\".", selector.debug
+            "#Тип нижнего крепления: Отсутствует \"Правила выбора крепления\".", selector.debug
         )

@@ -187,7 +187,8 @@ class ProductSelectionAvailableOptionsTestCase(TestCase):
         )
         product_selection = ProductSelectionAvailableOptions(project_item)
         product_selection.params['load_and_move']['load_minus_z'] = 500
-        product_selection.params['pipe_params']['pipe_mounting_group'] = pipe_mounting_group.id
+        product_selection.params['pipe_params']['pipe_mounting_group_bottom'] = pipe_mounting_group.id
+        product_selection.params['pipe_params']['pipe_mounting_group_top'] = None
         product_selection.params['pipe_params']['clamp_material'] = self.material.id
         product_selection.params['pipe_params']['nominal_diameter'] = self.pipe_diameter.id
         product_selection.params['pipe_params']['temp1'] = 130
@@ -381,7 +382,8 @@ class ProductSelectionAvailableOptionsTestCase(TestCase):
         )
         product_selection = ProductSelectionAvailableOptions(project_item)
         product_selection.params['load_and_move']['load_minus_z'] = 500
-        product_selection.params['pipe_params']['pipe_mounting_group'] = pipe_mounting_group.id
+        product_selection.params['pipe_params']['pipe_mounting_group_bottom'] = pipe_mounting_group.id
+        product_selection.params['pipe_params']['pipe_mounting_group_top'] = None
         product_selection.params['pipe_params']['clamp_material'] = self.material.id
         product_selection.params['pipe_params']['nominal_diameter'] = self.pipe_diameter.id
         product_selection.params['pipe_params']['temp1'] = 130

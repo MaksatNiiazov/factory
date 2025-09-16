@@ -93,7 +93,7 @@ class ShockCalcAPITest(TestCase):
             num_spring_blocks=1,
             pipe_direction=PipeDirectionChoices.X.value
         )
-        self.rule.pipe_mounting_groups.add(self.group)
+        self.rule.pipe_mounting_groups_bottom.add(self.group)
 
         # 8) Клиент и URL для тестов
         self.client = APIClient()
