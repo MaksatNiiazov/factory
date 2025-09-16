@@ -537,19 +537,19 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
         support_distances = SupportDistance.objects.all()
         return support_distances
 
-    def get_available_mounting_groups_a(self):
+    def get_available_mounting_groups_bottom(self):
         """
-        Получает доступные группы креплений A на основе параметров.
+        Получает доступные нижние группы креплений на основе параметров.
         """
         if not self.get_product_family():
-            self.debug.append('#Тип крепления A: Не выбран семейство изделии')
+            self.debug.append('#Тип нижнего крепления: Не выбрано семейство изделий')
             return PipeMountingGroup.objects.none()
 
         if not self.params.get('pipe_options', {}).get('spacer_counts'):
-            self.debug.append('#Тип крепления A: Не выбран количество амортизаторов')
+            self.debug.append('#Тип нижнего крепления: Не выбрано количество амортизаторов')
 
         if not self.params.get('pipe_options', {}).get('location'):
-            self.debug.append('#Тип крепления A: Не выбран направление трубы')
+            self.debug.append('#Тип нижнего крепления: Не выбрано направление трубы')
             return PipeMountingGroup.objects.none()
 
         rules = PipeMountingRule.objects.filter(
@@ -564,39 +564,39 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
         elif location == 'vertical':
             rule = rules.filter(pipe_direction='z').first()
         else:
-            self.debug.append('#Тип крепления A: Неверное направление трубы.')
+            self.debug.append('#Тип нижнего крепления: Неверное направление трубы.')
             return PipeMountingGroup.objects.none()
 
         if not rule:
-            self.debug.append('#Тип крепления A: Отсутствует "Правила выбора крепления".')
+            self.debug.append('#Тип нижнего крепления: Отсутствует "Правила выбора крепления".')
             return PipeMountingGroup.objects.none()
 
         pipe_mounting_groups = rule.pipe_mounting_groups_bottom.all()
 
         return pipe_mounting_groups
 
-    def get_available_mounting_groups_b(self):
+    def get_available_mounting_groups_top(self):
         """
-        Получает доступные группы креплений B на основе параметров.
+        Получает доступные верхние группы креплений на основе параметров.
         """
         if not self.get_product_family():
-            self.debug.append('#Тип крепления B: Не выбран семейство изделии')
+            self.debug.append('#Тип верхнего крепления: Не выбрано семейство изделий')
             return PipeMountingGroup.objects.none()
 
         family = self.get_product_family()
 
         if not family.is_upper_mount_selectable:
             self.debug.append(
-                '#Тип крепления B: Должен быть выбран "Доступен выбор верхнего крепления" в семейство изделии'
+                '#Тип верхнего крепления: Должен быть выбран "Доступен выбор верхнего крепления" в семействе изделий'
             )
             return PipeMountingGroup.objects.none()
 
         if not self.params.get('pipe_options', {}).get('spacer_counts'):
-            self.debug.append('#Тип крепления B: Не выбран количество амортизаторов')
+            self.debug.append('#Тип верхнего крепления: Не выбрано количество амортизаторов')
             return PipeMountingGroup.objects.none()
 
         if not self.params.get('pipe_options', {}).get('location'):
-            self.debug.append('#Тип крепления B: Не выбран направление трубы')
+            self.debug.append('#Тип верхнего крепления: Не выбрано направление трубы')
             return PipeMountingGroup.objects.none()
 
         rules = PipeMountingRule.objects.filter(
@@ -612,12 +612,12 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
             rule = rules.filter(pipe_direction='z').first()
 
         if not rule:
-            self.debug.append('#Тип крепления B: Отсутствует "Правила выбора крепления".')
+            self.debug.append('#Тип верхнего крепления: Отсутствует "Правила выбора крепления".')
             return PipeMountingGroup.objects.none()
 
-        mounting_groups_b = rule.mounting_groups_b.all()
+        mounting_groups_top = rule.pipe_mounting_groups_top.all()
 
-        return mounting_groups_b
+        return mounting_groups_top
 
     def get_available_materials(self):
         materials = Material.objects.all()
@@ -627,8 +627,8 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
         return {
             "pipe_diameters": self.get_available_pipe_diameters(),
             "support_distances": self.get_available_support_distances(),
-            "mounting_groups_a": self.get_available_mounting_groups_a(),
-            "mounting_groups_b": self.get_available_mounting_groups_b(),
+            "mounting_groups_bottom": self.get_available_mounting_groups_bottom(),
+            "mounting_groups_top": self.get_available_mounting_groups_top(),
             "materials": self.get_available_materials(),
         }
 
@@ -891,8 +891,8 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
                 "pipe_params": {
                     "pipe_diameters": list(PipeDiameter.objects.all().values_list("id", flat=True)),
                     "support_distances": list(SupportDistance.objects.all().values_list("id", flat=True)),
-                    "mounting_groups_a": list(self.get_available_mounting_groups_a().values_list("id", flat=True)),
-                    "mounting_groups_b": list(self.get_available_mounting_groups_b().values_list("id", flat=True)),
+                    "mounting_groups_bottom": list(self.get_available_mounting_groups_bottom().values_list("id", flat=True)),
+                    "mounting_groups_top": list(self.get_available_mounting_groups_top().values_list("id", flat=True)),
                     "materials": list(Material.objects.all().values_list("id", flat=True)),
                 },
                 "pipe_clamp": {
@@ -926,8 +926,8 @@ class SpacerSelectionAvailableOptions(BaseSelectionAvailableOptions):
             "pipe_params": {
                 "pipe_diameters": list(PipeDiameter.objects.all().values_list("id", flat=True)),
                 "support_distances": list(SupportDistance.objects.all().values_list("id", flat=True)),
-                "mounting_groups_a": list(self.get_available_mounting_groups_a().values_list("id", flat=True)),
-                "mounting_groups_b": list(self.get_available_mounting_groups_b().values_list("id", flat=True)),
+                "mounting_groups_bottom": list(self.get_available_mounting_groups_bottom().values_list("id", flat=True)),
+                "mounting_groups_top": list(self.get_available_mounting_groups_top().values_list("id", flat=True)),
                 "materials": list(Material.objects.all().values_list("id", flat=True)),
             },
             "pipe_clamp": {

@@ -170,7 +170,8 @@ class ProductSelectionAvailableOptionsTest(TestCase):
                     'branch_qty': 1,
                 },
                 'pipe_params': {
-                    'pipe_mounting_group': pipe_mounting_group.id,
+                    'pipe_mounting_group_bottom': pipe_mounting_group.id,
+                    'pipe_mounting_group_top': None,
                     'clamp_material': material.id,
                 },
                 'spring_choice': {

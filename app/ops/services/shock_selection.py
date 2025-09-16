@@ -51,6 +51,32 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
         }
         return params
 
+    def __init__(self, project_item):
+        super().__init__(project_item)
+        self._normalize_pipe_params()
+
+    def _normalize_pipe_params(self) -> None:
+        pipe_params = self.params.setdefault('pipe_params', {})
+        self._coalesce_pipe_param(pipe_params, 'mounting_group_bottom', ['mounting_group_a'])
+        self._coalesce_pipe_param(pipe_params, 'mounting_group_top', ['mounting_group_b'])
+
+    @staticmethod
+    def _coalesce_pipe_param(pipe_params: Dict[str, Any], key: str, legacy_keys: List[str]) -> None:
+        value = pipe_params.get(key)
+
+        if value:
+            for legacy_key in legacy_keys:
+                pipe_params.pop(legacy_key, None)
+            return
+
+        for legacy_key in legacy_keys:
+            legacy_value = pipe_params.pop(legacy_key, None)
+            if legacy_value:
+                pipe_params[key] = legacy_value
+                return
+
+        pipe_params.setdefault(key, None)
+
     def get_mounting_length_from_items(self) -> Optional[float]:
         """
         Возвращает суммарную монтажную длину по элементам спецификации (без исполнения).
@@ -403,41 +429,53 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
         return bool(found_load)
 
-    def get_mounting_group_a(self) -> Optional[PipeMountingGroup]:
+    def get_mounting_group_bottom(self) -> Optional[PipeMountingGroup]:
         """
-        Получает группу креплений A из параметров.
+        Получает нижнюю группу креплений (к трубе) из параметров.
         """
-        mounting_group_a_id = self.params['pipe_params']['mounting_group_a']
+        pipe_params = self.params.get('pipe_params', {})
+        mounting_group_bottom_id = (
+            pipe_params.get('mounting_group_bottom')
+            or pipe_params.get('mounting_group_a')
+        )
 
-        if not mounting_group_a_id:
-            self.debug.append("Не выбрана группа креплений A.")
+        if not mounting_group_bottom_id:
+            self.debug.append("Не выбрана нижняя группа креплений.")
             return None
 
-        mounting_group_a = PipeMountingGroup.objects.filter(id=mounting_group_a_id).first()
+        mounting_group_bottom = PipeMountingGroup.objects.filter(id=mounting_group_bottom_id).first()
 
-        if not mounting_group_a:
-            self.debug.append(f"Группа креплений A с id={mounting_group_a_id} не найдена. Возможно она была удалена.")
+        if not mounting_group_bottom:
+            self.debug.append(
+                f"Нижняя группа креплений с id={mounting_group_bottom_id} не найдена. Возможно она была удалена."
+            )
             return None
 
-        return mounting_group_a
+        return mounting_group_bottom
 
-    def get_mounting_group_b(self) -> Optional[PipeMountingGroup]:
+    def get_mounting_group_top(self) -> Optional[PipeMountingGroup]:
         """
-        Получает группу креплений B из параметров.
+        Получает верхнюю группу креплений (к металлоконструкции) из параметров.
         """
-        mounting_group_b_id = self.params['pipe_params']['mounting_group_b']
+        pipe_params = self.params.get('pipe_params', {})
+        mounting_group_top_id = (
+            pipe_params.get('mounting_group_top')
+            or pipe_params.get('mounting_group_b')
+        )
 
-        if not mounting_group_b_id:
-            self.debug.append("Не выбрана группа креплений B.")
+        if not mounting_group_top_id:
+            self.debug.append("Не выбрана верхняя группа креплений.")
             return None
 
-        mounting_group_b = PipeMountingGroup.objects.filter(id=mounting_group_b_id).first()
+        mounting_group_top = PipeMountingGroup.objects.filter(id=mounting_group_top_id).first()
 
-        if not mounting_group_b:
-            self.debug.append(f"Группа креплений B с id={mounting_group_b_id} не найдена. Возможно она была удалена.")
+        if not mounting_group_top:
+            self.debug.append(
+                f"Верхняя группа креплений с id={mounting_group_top_id} не найдена. Возможно она была удалена."
+            )
             return None
 
-        return mounting_group_b
+        return mounting_group_top
 
     def get_available_pipe_clamps_a(self) -> List[int]:
         """
@@ -503,13 +541,13 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
         load_with_temp = load_value / coefficient.coefficient
 
-        # Группа креплений A
-        mounting_group_a = self.get_mounting_group_a()
-        if not mounting_group_a:
-            self.debug.append("#Список креплений A: Не выбрана группа креплений A. Поиск невозможен.")
+        # Группа креплений A (нижнее крепление)
+        mounting_group_bottom = self.get_mounting_group_bottom()
+        if not mounting_group_bottom:
+            self.debug.append("#Список креплений A: Не выбрана нижняя группа креплений. Поиск невозможен.")
             return []
 
-        variants = mounting_group_a.variants.all()
+        variants = mounting_group_bottom.variants.all()
         items = Item.objects.filter(variant__in=variants)
 
         found_items = []
@@ -572,10 +610,10 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
         Получает список доступных креплений B для текущих параметров.
         """
         self.debug.append('#Список креплений B: Начинаю поиск доступных креплений B')
-        mounting_group_b = self.get_mounting_group_b()
+        mounting_group_top = self.get_mounting_group_top()
 
-        if not mounting_group_b:
-            self.debug.append("#Список креплений B: Не выбрана группа креплений B. Поиск невозможен.")
+        if not mounting_group_top:
+            self.debug.append("#Список креплений B: Не выбрана верхняя группа креплений. Поиск невозможен.")
             return []
 
         selected_clamp_load = self.get_selected_clamp_load()
@@ -608,7 +646,7 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
         load_with_temp = load_value / coefficient.coefficient
 
-        variants = mounting_group_b.variants.all()
+        variants = mounting_group_top.variants.all()
         items = Item.objects.filter(variant__in=variants)
 
         found_items = []
@@ -753,18 +791,18 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
 
     def is_clamp_a_required(self) -> bool:
         """
-        Проверяет, требуется ли крепление A на основе наличия исполнений в группе креплений A.
+        Проверяет, требуется ли нижнее крепление на основе наличия исполнений в группе креплений.
         """
-        mounting_group_a = self.get_mounting_group_a()
+        mounting_group_bottom = self.get_mounting_group_bottom()
 
-        if not mounting_group_a:
+        if not mounting_group_bottom:
             # TODO: Подумать над тем, что делать если группа креплений A не выбрана
             return True
 
-        if mounting_group_a.variants.exists():
+        if mounting_group_bottom.variants.exists():
             return True
         else:
-            self.debug.append('Крепление A не требуется, так как группа креплений A не содержит исполнений.')
+            self.debug.append('Крепление A не требуется, так как нижняя группа креплений не содержит исполнений.')
             return False
 
     def get_pipe_clamp_a(self) -> Optional[Item]:
@@ -788,16 +826,16 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
         """
         Проверяет, требуется ли крепление B на основе наличия исполнений в группе креплений B.
         """
-        mounting_group_b = self.get_mounting_group_b()
+        mounting_group_top = self.get_mounting_group_top()
 
-        if not mounting_group_b:
+        if not mounting_group_top:
             # TODO: Подумать над тем, что делать если группа креплений B не выбрана
             return True
 
-        if mounting_group_b.variants.exists():
+        if mounting_group_top.variants.exists():
             return True
         else:
-            self.debug.append('Крепление B не требуется, так как группа креплений B не содержит исполнений.')
+            self.debug.append('Крепление B не требуется, так как верхняя группа креплений не содержит исполнений.')
             return False
 
     def get_pipe_clamp_b(self) -> Optional[Item]:
@@ -1158,8 +1196,8 @@ class ShockSelectionAvailableOptions(BaseSelectionAvailableOptions):
                 'pipe_params': {
                     'pipe_diameters': list(PipeDiameter.objects.all().values_list('id', flat=True)),
                     'support_distances': list(SupportDistance.objects.all().values_list('id', flat=True)),
-                    'mounting_groups_a': [],
-                    'mounting_groups_b': [],
+                    'mounting_groups_bottom': [],
+                    'mounting_groups_top': [],
                     'materials': list(Material.objects.all().values_list('id', flat=True)),
                 },
                 'pipe_clamp': {

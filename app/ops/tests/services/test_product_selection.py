@@ -187,7 +187,8 @@ class ProductSelectionAvailableOptionsTestCase(TestCase):
         )
         product_selection = ProductSelectionAvailableOptions(project_item)
         product_selection.params['load_and_move']['load_minus_z'] = 500
-        product_selection.params['pipe_params']['pipe_mounting_group'] = pipe_mounting_group.id
+        product_selection.params['pipe_params']['pipe_mounting_group_bottom'] = pipe_mounting_group.id
+        product_selection.params['pipe_params']['pipe_mounting_group_top'] = None
         product_selection.params['pipe_params']['clamp_material'] = self.material.id
         product_selection.params['pipe_params']['nominal_diameter'] = self.pipe_diameter.id
         product_selection.params['pipe_params']['temp1'] = 130
@@ -381,7 +382,8 @@ class ProductSelectionAvailableOptionsTestCase(TestCase):
         )
         product_selection = ProductSelectionAvailableOptions(project_item)
         product_selection.params['load_and_move']['load_minus_z'] = 500
-        product_selection.params['pipe_params']['pipe_mounting_group'] = pipe_mounting_group.id
+        product_selection.params['pipe_params']['pipe_mounting_group_bottom'] = pipe_mounting_group.id
+        product_selection.params['pipe_params']['pipe_mounting_group_top'] = None
         product_selection.params['pipe_params']['clamp_material'] = self.material.id
         product_selection.params['pipe_params']['nominal_diameter'] = self.pipe_diameter.id
         product_selection.params['pipe_params']['temp1'] = 130
@@ -398,3 +400,65 @@ class ProductSelectionAvailableOptionsTestCase(TestCase):
         self.assertIsNotNone(found_zom_item)
         self.assertEqual(found_hzn_item.id, hzn_item.id)
         self.assertEqual(found_zom_item.id, zom_item.id)
+
+
+class ProductSelectionLegacyParamsNormalizationTestCase(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='legacy@example.com',
+            password='legacy-pass',
+        )
+        self.product_class = ProductClass.objects.create(name='LegacyProductClass')
+        self.product_family = ProductFamily.objects.create(
+            product_class=self.product_class,
+            name='LegacyFamily',
+            is_upper_mount_selectable=True,
+        )
+        self.pipe_mounting_group = PipeMountingGroup.objects.create(name='Legacy pipe clamp group')
+        self.project = Project.objects.create(
+            number='LEGACY-1',
+            owner=self.user,
+            status=ProjectStatus.DRAFT,
+            load_unit=LoadUnit.KN,
+            move_unit=MoveUnit.MM,
+            temperature_unit=TemperatureUnit.CELSIUS,
+        )
+        legacy_selection_params = {
+            'pipe_params': {
+                'pipe_mounting_group': self.pipe_mounting_group.id,
+            },
+            'pipe_clamp': {},
+            'pipe_options': {},
+            'load_and_move': {},
+            'spring_choice': {},
+            'system_settings': {},
+            'variant': None,
+        }
+        self.project_item = ProjectItem.objects.create(
+            project=self.project,
+            position_number=1,
+            product_family=self.product_family,
+            selection_params=legacy_selection_params,
+        )
+
+    def test_bottom_mounting_group_legacy_key_is_normalized(self):
+        product_selection = ProductSelectionAvailableOptions(self.project_item)
+
+        self.assertNotIn(
+            'pipe_mounting_group',
+            product_selection.params['pipe_params'],
+        )
+        self.assertEqual(
+            product_selection.params['pipe_params'].get('pipe_mounting_group_bottom'),
+            self.pipe_mounting_group.id,
+        )
+        self.assertEqual(
+            product_selection.get_selected_pipe_mounting_group_bottom(),
+            self.pipe_mounting_group,
+        )
+
+    def test_top_mounting_group_defaults_to_none(self):
+        product_selection = ProductSelectionAvailableOptions(self.project_item)
+
+        self.assertIn('pipe_mounting_group_top', product_selection.params['pipe_params'])
+        self.assertIsNone(product_selection.get_selected_pipe_mounting_group_top())

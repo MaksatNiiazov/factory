@@ -94,6 +94,32 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
         }
         return params
 
+    def __init__(self, project_item):
+        super().__init__(project_item)
+        self._normalize_pipe_params()
+
+    def _normalize_pipe_params(self) -> None:
+        pipe_params = self.params.setdefault('pipe_params', {})
+        self._coalesce_pipe_param(pipe_params, 'pipe_mounting_group_bottom', ['pipe_mounting_group'])
+        self._coalesce_pipe_param(pipe_params, 'pipe_mounting_group_top', [])
+
+    @staticmethod
+    def _coalesce_pipe_param(pipe_params: Dict[str, Any], key: str, legacy_keys: List[str]) -> None:
+        value = pipe_params.get(key)
+
+        if value:
+            for legacy_key in legacy_keys:
+                pipe_params.pop(legacy_key, None)
+            return
+
+        for legacy_key in legacy_keys:
+            legacy_value = pipe_params.pop(legacy_key, None)
+            if legacy_value:
+                pipe_params[key] = legacy_value
+                return
+
+        pipe_params.setdefault(key, None)
+
     def is_clamp_or_shoe(self, attributes: List[Attribute]) -> bool:
         """
         Проверяет, содержит ли список атрибутов параметр 'Номинальный диаметр трубы' (PipeDiameter),
@@ -838,18 +864,27 @@ class ProductSelectionAvailableOptions(BaseSelectionAvailableOptions):
         return list(set(found_item_ids))
 
     def get_selected_pipe_mounting_group_bottom(self):
-        if not self.params['pipe_params']['pipe_mounting_group_bottom']:
+        pipe_params = self.params.get('pipe_params', {})
+        group_id = (
+            pipe_params.get('pipe_mounting_group_bottom')
+            or pipe_params.get('pipe_mounting_group')
+        )
+
+        if not group_id:
             self.debug.append('#Выбор крепления к трубе (нижнее): Не выбран тип крепления.')
             return None
 
-        return PipeMountingGroup.objects.get(id=self.params['pipe_params']['pipe_mounting_group_bottom'])
+        return PipeMountingGroup.objects.get(id=group_id)
 
     def get_selected_pipe_mounting_group_top(self):
-        if not self.params["pipe_params"]["pipe_mounting_group_top"]:
+        pipe_params = self.params.get('pipe_params', {})
+        group_id = pipe_params.get('pipe_mounting_group_top')
+
+        if not group_id:
             self.debug.append("#Выбор крепления к металлоконструкции (верхнее): Не выбран тип крепления.")
             return None
 
-        return PipeMountingGroup.objects.get(id=self.params["pipe_params"]["pipe_mounting_group_top"])
+        return PipeMountingGroup.objects.get(id=group_id)
 
     def get_available_pipe_clamp_variants(self, pipe_mounting_group):
         self.debug.append(f"#Выбор крепления к трубе: Показываю список исполнений вместо деталей.")

@@ -64,7 +64,7 @@ class AssemblyLengthAPITest(TestCase):
         groupA.variants.add(self.varA1, self.varA2)
         PipeMountingRule.objects.create(
             family=fam, num_spring_blocks=1, pipe_direction=PipeDirectionChoices.X.value
-        ).pipe_mounting_groups.add(groupA)
+        ).pipe_mounting_groups_bottom.add(groupA)
 
         # Группа креплений B → один вариант с mounting_size 5
         self.varB = Variant.objects.create(detail_type=self.detail, name="Clamp B")
