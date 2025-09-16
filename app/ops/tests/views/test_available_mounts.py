@@ -65,7 +65,7 @@ class AvailableMountsAPITest(TestCase):
             num_spring_blocks=1,
             pipe_direction=PipeDirectionChoices.X.value
         )
-        self.rule.pipe_mounting_groups.add(self.group)
+        self.rule.pipe_mounting_groups_bottom.add(self.group)
 
         # 6) Item с любым catalog
         self.item = Item.objects.create(

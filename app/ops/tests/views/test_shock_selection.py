@@ -67,7 +67,7 @@ class ShockSelectionAPITest(APITestCase):
             num_spring_blocks=1,
             pipe_direction=PipeDirectionChoices.X.value
         )
-        cls.rule.pipe_mounting_groups.add(cls.group)
+        cls.rule.pipe_mounting_groups_bottom.add(cls.group)
 
         # 6) Item с любым catalog
         cls.item = Item.objects.create(
@@ -106,8 +106,8 @@ class ShockSelectionAPITest(APITestCase):
                     "pipe_diameter_size_manual": None,
                     "support_distance": None,
                     "support_distance_manual": None,
-                    "mounting_group_a": None,
-                    "mounting_group_b": None,
+                    "mounting_group_bottom": None,
+                    "mounting_group_top": None,
                     "material": None,
                     "temperature": None
                 },
@@ -159,10 +159,10 @@ class ShockSelectionAPITest(APITestCase):
             ("Ошибка (недопустимая нагрузка)",
              {"load": -10, "move": 0, "load_type": "h", "installation_length": None, "shock_counts": 1,
               "location": "horizontal"}, 200),
-            ("С креплениями A и B",
+            ("С креплениями нижнего и верхнего креплений",
              {"load": 40, "move": 200, "load_type": "h", "installation_length": 1250, "shock_counts": 2,
-              "location": "horizontal", "material": 1, "pipe_diameter": 102, "mounting_group_a": 1,
-              "mounting_group_b": 2, "pipe_clamp_a": 100, "pipe_clamp_b": 200}, 200),
+              "location": "horizontal", "material": 1, "pipe_diameter": 102, "mounting_group_bottom": 1,
+              "mounting_group_top": 2, "pipe_clamp_a": 100, "pipe_clamp_b": 200}, 200),
 
             ("Без креплений",
              {"load": 45, "move": 130, "load_type": "h", "installation_length": None, "shock_counts": 1,
@@ -189,8 +189,8 @@ class ShockSelectionAPITest(APITestCase):
                         "pipe_diameter_size_manual": None,
                         "support_distance": data.get("support_distance"),
                         "support_distance_manual": None,
-                        "mounting_group_a": data.get("mounting_group_a"),
-                        "mounting_group_b": data.get("mounting_group_b"),
+                        "mounting_group_bottom": data.get("mounting_group_bottom"),
+                        "mounting_group_top": data.get("mounting_group_top"),
                         "material": data.get("material"),
                         "temperature": data.get("temperature"),
                     },
